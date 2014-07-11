@@ -30,6 +30,7 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/absvti2.c \
   lib/builtins/adddf3.c \
   lib/builtins/addsf3.c \
+  lib/builtins/addtf3.c \
   lib/builtins/addvdi3.c \
   lib/builtins/addvsi3.c \
   lib/builtins/addvti3.c \
@@ -45,6 +46,7 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/cmpti2.c \
   lib/builtins/comparedf2.c \
   lib/builtins/comparesf2.c \
+  lib/builtins/comparetf2.c \
   lib/builtins/ctzdi2.c \
   lib/builtins/ctzsi2.c \
   lib/builtins/ctzti2.c \
@@ -110,6 +112,7 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/muloti4.c \
   lib/builtins/mulsc3.c \
   lib/builtins/mulsf3.c \
+  lib/builtins/multf3.c \
   lib/builtins/multi3.c \
   lib/builtins/mulvdi3.c \
   lib/builtins/mulvsi3.c \
@@ -134,6 +137,7 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/powixf2.c \
   lib/builtins/subdf3.c \
   lib/builtins/subsf3.c \
+  lib/builtins/subtf3.c \
   lib/builtins/subvdi3.c \
   lib/builtins/subvsi3.c \
   lib/builtins/subvti3.c \
@@ -176,6 +180,7 @@ libcompiler_rt_arm64_SRC_FILES :=
 
 # MIPS-specific runtimes
 libcompiler_rt_mips_SRC_FILES := # nothing to add
+libcompiler_rt_mips64_SRC_FILES := # nothing to add
 
 # X86-specific runtimes
 libcompiler_rt_x86_SRC_FILES := \
@@ -217,7 +222,8 @@ define get-libcompiler-rt-source-files
              $(if $(findstring $(1),x86_64),$(call get-libcompiler-rt-x86_64-source-files),
                  $(if $(findstring $(1),x32),$(call get-libcompiler-rt-x86-source-files),
                     $(if $(findstring $(1),arm64),$(call get-libcompiler-rt-arm64-source-files),
-  $(error Unsupported ARCH $(1))))))))
+                       $(if $(findstring $(1),mips64),$(call get-libcompiler-rt-mips64-source-files),
+  $(error Unsupported ARCH $(1)))))))))
 endef
 
 # $(1): source list
@@ -270,6 +276,12 @@ define get-libcompiler-rt-mips-source-files
       $(libcompiler_rt_mips_SRC_FILES),mips)
 endef
 
+define get-libcompiler-rt-mips64-source-files
+  $(call filter-libcompiler-rt-common-source-files,
+      $(libcompiler_rt_common_SRC_FILES) \
+      $(libcompiler_rt_mips64_SRC_FILES),mips64)
+endef
+
 define get-libcompiler-rt-x86-source-files
   $(call filter-libcompiler-rt-common-source-files,
       $(libcompiler_rt_common_SRC_FILES) \
@@ -306,10 +318,6 @@ ifneq ($(WITHOUT_TARGET_CLANG), true)
 
 include $(CLEAR_VARS)
 
-ifeq ($(TARGET_ARCH),mips64)
-$(warning TODOMips64: Enable compiler-rt build)
-endif
-
 LOCAL_MODULE := libcompiler_rt
 LOCAL_CFLAGS_arm += -D__ARM_EABI__
 LOCAL_ASFLAGS := -integrated-as
@@ -317,9 +325,10 @@ LOCAL_CLANG := true
 LOCAL_SRC_FILES_arm := $(call get-libcompiler-rt-source-files,arm)
 LOCAL_SRC_FILES_arm64 := $(call get-libcompiler-rt-source-files,arm64)
 LOCAL_SRC_FILES_mips := $(call get-libcompiler-rt-source-files,mips)
+LOCAL_SRC_FILES_mips64 := $(call get-libcompiler-rt-source-files,mips64)
 LOCAL_SRC_FILES_x86 := $(call get-libcompiler-rt-source-files,x86)
 LOCAL_SRC_FILES_x86_64 := $(call get-libcompiler-rt-source-files,x86_64)
-LOCAL_MODULE_TARGET_ARCH := arm arm64 mips x86 x86_64
+LOCAL_MODULE_TARGET_ARCH := arm arm64 mips mips64 x86 x86_64
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_STATIC_LIBRARY)
@@ -335,6 +344,7 @@ LOCAL_ASFLAGS := -integrated-as
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(call get-libcompiler-rt-source-files,x86_64)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+LOCAL_MULTILIB := both
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -358,7 +368,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcompiler_rt
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_WHOLE_STATIC_LIBRARIES := libcompiler_rt
-LOCAL_MODULE_TARGET_ARCH := arm arm64 mips x86 x86_64
+LOCAL_MODULE_TARGET_ARCH := arm arm64 mips mips64 x86 x86_64
 
 include $(BUILD_SHARED_LIBRARY)
 
@@ -377,6 +387,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := libcompiler_rt
 LOCAL_CPPFLAGS := -nostdinc++
 LOCAL_LDFLAGS := -nodefaultlibs
 LOCAL_LDLIBS := -lc -lm
+LOCAL_MULTILIB := both
 
 include $(BUILD_HOST_SHARED_LIBRARY)
 
