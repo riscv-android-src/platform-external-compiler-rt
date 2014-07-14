@@ -15,8 +15,19 @@
 #include "../assembly.h"
 
 	.syntax unified
-
 	.text
+#if __ARM_ARCH_ISA_THUMB == 2
+	.thumb
+#endif
+
+#if __ARM_ARCH_ISA_THUMB == 2
+#define IT  it
+#define ITT itt
+#else
+#define IT  @
+#define ITT @
+#endif
+
 	.p2align 2
 DEFINE_COMPILERRT_FUNCTION(__umodsi3)
 #if __ARM_ARCH_EXT_IDIV__
@@ -30,9 +41,11 @@ DEFINE_COMPILERRT_FUNCTION(__umodsi3)
 #else
 	cmp	r1, #1
 	bcc	LOCAL_LABEL(divby0)
+	ITT eq
 	moveq	r0, #0
 	JMPc(lr, eq)
 	cmp	r0, r1
+	IT cc
 	JMPc(lr, cc)
 	/*
 	 * Implement division using binary long division algorithm.
@@ -90,8 +103,9 @@ DEFINE_COMPILERRT_FUNCTION(__umodsi3)
 
 #define	IMM	#
 
-#define block(shift) \
-	cmp	r0, r1, lsl IMM shift; \
+#define block(shift)                                                           \
+	cmp	r0, r1, lsl IMM shift;                                         \
+	IT hs;                                                                 \
 	subhs	r0, r0, r1, lsl IMM shift
 
 	block(31)
