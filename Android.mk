@@ -23,7 +23,6 @@ ifeq (,$(TARGET_BUILD_APPS))
 #
 # Skip apple_versioning.c since it is unused.
 # Skip atomic.c since it needs to be built separately according to the docs.
-# Skip gcc_personality_v0.c since it depends on libunwind.
 libcompiler_rt_common_SRC_FILES := \
   lib/builtins/absvdi2.c \
   lib/builtins/absvsi2.c \
@@ -53,6 +52,7 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/divdc3.c \
   lib/builtins/divdf3.c \
   lib/builtins/divdi3.c \
+  lib/builtins/divtf3.c \
   lib/builtins/divmoddi4.c \
   lib/builtins/divmodsi4.c \
   lib/builtins/divsc3.c \
@@ -62,7 +62,9 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/divxc3.c \
   lib/builtins/enable_execute_stack.c \
   lib/builtins/eprintf.c \
+  lib/builtins/extenddftf2.c \
   lib/builtins/extendsfdf2.c \
+  lib/builtins/extendsftf2.c \
   lib/builtins/ffsdi2.c \
   lib/builtins/ffsti2.c \
   lib/builtins/fixdfdi.c \
@@ -87,6 +89,7 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/floatdixf.c \
   lib/builtins/floatsidf.c \
   lib/builtins/floatsisf.c \
+  lib/builtins/floatsitf.c \
   lib/builtins/floattidf.c \
   lib/builtins/floattisf.c \
   lib/builtins/floattixf.c \
@@ -95,9 +98,11 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/floatundixf.c \
   lib/builtins/floatunsidf.c \
   lib/builtins/floatunsisf.c \
+  lib/builtins/floatunsitf.c \
   lib/builtins/floatuntidf.c \
   lib/builtins/floatuntisf.c \
   lib/builtins/floatuntixf.c \
+  lib/builtins/gcc_personality_v0.c \
   lib/builtins/int_util.c \
   lib/builtins/lshrdi3.c \
   lib/builtins/lshrti3.c \
@@ -143,6 +148,8 @@ libcompiler_rt_common_SRC_FILES := \
   lib/builtins/subvti3.c \
   lib/builtins/trampoline_setup.c \
   lib/builtins/truncdfsf2.c \
+  lib/builtins/trunctfdf2.c \
+  lib/builtins/trunctfsf2.c \
   lib/builtins/ucmpdi2.c \
   lib/builtins/ucmpti2.c \
   lib/builtins/udivdi3.c \
@@ -158,6 +165,7 @@ libcompiler_rt_common_SRC_FILES := \
 # ARM-specific runtimes
 libcompiler_rt_arm_SRC_FILES := \
   lib/builtins/arm/aeabi_dcmp.S \
+  lib/builtins/arm/aeabi_div0.c \
   lib/builtins/arm/aeabi_fcmp.S \
   lib/builtins/arm/aeabi_idivmod.S \
   lib/builtins/arm/aeabi_ldivmod.S \
@@ -368,6 +376,13 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcompiler_rt
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_WHOLE_STATIC_LIBRARIES := libcompiler_rt
+LOCAL_SHARED_LIBRARIES := libdl
+LOCAL_STATIC_LIBRARIES_arm := libunwind_llvm
+LOCAL_STATIC_LIBRARIES_arm64 := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_mips := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_mips64 := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_x86 := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_x86_64 := libunwindbacktrace
 LOCAL_MODULE_TARGET_ARCH := arm arm64 mips mips64 x86 x86_64
 
 include $(BUILD_SHARED_LIBRARY)
@@ -384,9 +399,12 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcompiler_rt
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_WHOLE_STATIC_LIBRARIES := libcompiler_rt
+ifneq ($(HOST_OS),darwin)
+LOCAL_STATIC_LIBRARIES := libunwindbacktrace
+endif
 LOCAL_CPPFLAGS := -nostdinc++
 LOCAL_LDFLAGS := -nodefaultlibs
-LOCAL_LDLIBS := -lc -lm
+LOCAL_LDLIBS := -lpthread -lc -lm
 LOCAL_MULTILIB := both
 
 include $(BUILD_HOST_SHARED_LIBRARY)
