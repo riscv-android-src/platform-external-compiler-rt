@@ -173,14 +173,16 @@ CFLAGS.asan_osx_dynamic := \
 	-isysroot $(OSX_SDK) \
 	-fno-builtin \
 	-gline-tables-only \
-	-DMAC_INTERPOSE_FUNCTIONS=1
+	-DMAC_INTERPOSE_FUNCTIONS=1 \
+	-DASAN_DYNAMIC=1
 
 CFLAGS.asan_iossim_dynamic := \
 	$(CFLAGS) -mios-simulator-version-min=7.0 \
         -isysroot $(IOSSIM_SDK) \
         -fno-builtin \
 	-gline-tables-only \
-	-DMAC_INTERPOSE_FUNCTIONS=1
+	-DMAC_INTERPOSE_FUNCTIONS=1 \
+	-DASAN_DYNAMIC=1
 
 CFLAGS.ubsan_osx := $(CFLAGS) -mmacosx-version-min=10.6 \
 	-isysroot $(OSX_SDK) \
@@ -257,7 +259,13 @@ FUNCTIONS.asan_iossim_dynamic := $(AsanFunctions) $(AsanCXXFunctions) \
 FUNCTIONS.ubsan_osx := $(UbsanFunctions) $(UbsanCXXFunctions) \
                        $(SanitizerCommonFunctions)
 
+CCKEXT_PROFILE_FUNCTIONS := \
+	InstrProfiling \
+	InstrProfilingBuffer \
+	InstrProfilingPlatformDarwin
+
 CCKEXT_COMMON_FUNCTIONS := \
+	$(CCKEXT_PROFILE_FUNCTIONS) \
 	absvdi2 \
 	absvsi2 \
 	addvdi3 \
@@ -402,10 +410,17 @@ CCKEXT_ARMVFP_FUNCTIONS := $(CCKEXT_ARM_FUNCTIONS) \
 	unorddf2vfp \
 	unordsf2vfp
 
+CCKEXT_ARM64_FUNCTIONS := \
+	$(CCKEXT_PROFILE_FUNCTIONS) \
+	divdc3 \
+	divsc3 \
+	muldc3 \
+	mulsc3
+
 FUNCTIONS.cc_kext.armv7 := $(CCKEXT_ARMVFP_FUNCTIONS)
 FUNCTIONS.cc_kext.armv7k := $(CCKEXT_ARMVFP_FUNCTIONS)
 FUNCTIONS.cc_kext.armv7s := $(CCKEXT_ARMVFP_FUNCTIONS)
-FUNCTIONS.cc_kext.arm64 := mulsc3 muldc3 divsc3 divdc3
+FUNCTIONS.cc_kext.arm64 := $(CCKEXT_ARM64_FUNCTIONS)
 FUNCTIONS.cc_kext_ios5.armv7 := $(CCKEXT_ARMVFP_FUNCTIONS)
 FUNCTIONS.cc_kext_ios5.armv7k := $(CCKEXT_ARMVFP_FUNCTIONS)
 FUNCTIONS.cc_kext_ios5.armv7s := $(CCKEXT_ARMVFP_FUNCTIONS)

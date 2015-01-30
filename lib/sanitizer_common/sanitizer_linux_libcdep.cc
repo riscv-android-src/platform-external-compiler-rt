@@ -208,6 +208,8 @@ uptr ThreadDescriptorSize() {
         val = FIRST_32_SECOND_64(1168, 1776);
       else if (minor <= 12)
         val = FIRST_32_SECOND_64(1168, 2288);
+      else if (minor == 13)
+        val = FIRST_32_SECOND_64(1168, 2304);
       else
         val = FIRST_32_SECOND_64(1216, 2304);
     }
@@ -370,16 +372,15 @@ static int dl_iterate_phdr_cb(dl_phdr_info *info, size_t size, void *arg) {
   DlIteratePhdrData *data = (DlIteratePhdrData*)arg;
   if (data->current_n == data->max_n)
     return 0;
-  InternalScopedBuffer<char> module_name(kMaxPathLength);
-  module_name.data()[0] = '\0';
+  InternalScopedString module_name(kMaxPathLength);
   if (data->first) {
     data->first = false;
     // First module is the binary itself.
     ReadBinaryName(module_name.data(), module_name.size());
   } else if (info->dlpi_name) {
-    internal_strncpy(module_name.data(), info->dlpi_name, module_name.size());
+    module_name.append("%s", info->dlpi_name);
   }
-  if (module_name.data()[0] == '\0')
+  if (module_name[0] == '\0')
     return 0;
   if (data->filter && !data->filter(module_name.data()))
     return 0;

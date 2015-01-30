@@ -74,6 +74,14 @@ extern "C" {
   // This can be useful for coverage-directed in-process fuzzers.
   uintptr_t __sanitizer_get_total_unique_coverage();
 
+  // Reset the basic-block (edge) coverage to the initial state.
+  // Useful for in-process fuzzing to start collecting coverage from scratch.
+  // Experimental, will likely not work for multi-threaded process.
+  void __sanitizer_reset_coverage();
+  // Set *data to the array of covered PCs and return the size of that array.
+  // Some of the entries in *data will be zero.
+  uintptr_t __sanitizer_get_coverage_guards(uintptr_t **data);
+
   // Annotate the current state of a contiguous container, such as
   // std::vector, std::string or similar.
   // A contiguous container is a container that keeps all of its elements
@@ -120,6 +128,9 @@ extern "C" {
   // Print the stack trace leading to this call. Useful for debugging user code.
   void __sanitizer_print_stack_trace();
 
+  // Sets the callback to be called right before death on error.
+  // Passing 0 will unset the callback.
+  void __sanitizer_set_death_callback(void (*callback)(void));
 #ifdef __cplusplus
 }  // extern "C"
 #endif

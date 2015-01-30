@@ -20,7 +20,6 @@
 
 #include "sanitizer/allocator_interface.h"
 #include "sanitizer/msan_interface.h"
-#include "msandr_test_so.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -28,7 +27,6 @@
 #include <stdio.h>
 #include <wchar.h>
 #include <math.h>
-#include <malloc.h>
 
 #include <arpa/inet.h>
 #include <dlfcn.h>
@@ -44,19 +42,28 @@
 #include <sys/resource.h>
 #include <sys/ioctl.h>
 #include <sys/statvfs.h>
-#include <sys/sysinfo.h>
 #include <sys/utsname.h>
 #include <sys/mman.h>
-#include <sys/vfs.h>
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <wordexp.h>
-#include <mntent.h>
-#include <netinet/ether.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+
+#if !defined(__FreeBSD__)
+# include <malloc.h>
+# include <sys/sysinfo.h>
+# include <sys/vfs.h>
+# include <mntent.h>
+# include <netinet/ether.h>
+#else
+# include <netinet/in.h>
+# include <sys/uio.h>
+# include <sys/mount.h>
+# define f_namelen f_namemax  // FreeBSD names this statfs field so.
+#endif
 
 #if defined(__i386__) || defined(__x86_64__)
 # include <emmintrin.h>
@@ -67,6 +74,19 @@
 
 #ifdef __AVX2__
 # include <immintrin.h>
+#endif
+
+// On FreeBSD procfs is not enabled by default.
+#if defined(__FreeBSD__)
+# define FILE_TO_READ "/bin/cat"
+# define DIR_TO_READ "/bin"
+# define SUBFILE_TO_READ "cat"
+# define SYMLINK_TO_READ "/usr/bin/tar"
+#else
+# define FILE_TO_READ "/proc/self/stat"
+# define DIR_TO_READ "/proc/self"
+# define SUBFILE_TO_READ "stat"
+# define SYMLINK_TO_READ "/proc/self/exe"
 #endif
 
 static const size_t kPageSize = 4096;
@@ -494,9 +514,8 @@ static char *DynRetTestStr;
 
 TEST(MemorySanitizer, DynRet) {
   ReturnPoisoned<S8>();
-  EXPECT_NOT_POISONED(clearenv());
+  EXPECT_NOT_POISONED(atoi("0"));
 }
-
 
 TEST(MemorySanitizer, DynRet1) {
   ReturnPoisoned<S8>();
@@ -552,7 +571,7 @@ TEST(MemorySanitizer, strerror) {
 TEST(MemorySanitizer, strerror_r) {
   errno = 0;
   char buf[1000];
-  char *res = strerror_r(EINVAL, buf, sizeof(buf));
+  char *res = (char*) (size_t) strerror_r(EINVAL, buf, sizeof(buf));
   ASSERT_EQ(0, errno);
   if (!res) res = buf; // POSIX version success.
   EXPECT_NOT_POISONED(strlen(res));
@@ -560,7 +579,7 @@ TEST(MemorySanitizer, strerror_r) {
 
 TEST(MemorySanitizer, fread) {
   char *x = new char[32];
-  FILE *f = fopen("/proc/self/stat", "r");
+  FILE *f = fopen(FILE_TO_READ, "r");
   ASSERT_TRUE(f != NULL);
   fread(x, 1, 32, f);
   EXPECT_NOT_POISONED(x[0]);
@@ -572,7 +591,7 @@ TEST(MemorySanitizer, fread) {
 
 TEST(MemorySanitizer, read) {
   char *x = new char[32];
-  int fd = open("/proc/self/stat", O_RDONLY);
+  int fd = open(FILE_TO_READ, O_RDONLY);
   ASSERT_GT(fd, 0);
   int sz = read(fd, x, 32);
   ASSERT_EQ(sz, 32);
@@ -585,7 +604,7 @@ TEST(MemorySanitizer, read) {
 
 TEST(MemorySanitizer, pread) {
   char *x = new char[32];
-  int fd = open("/proc/self/stat", O_RDONLY);
+  int fd = open(FILE_TO_READ, O_RDONLY);
   ASSERT_GT(fd, 0);
   int sz = pread(fd, x, 32, 0);
   ASSERT_EQ(sz, 32);
@@ -603,11 +622,11 @@ TEST(MemorySanitizer, readv) {
   iov[0].iov_len = 5;
   iov[1].iov_base = buf + 10;
   iov[1].iov_len = 2000;
-  int fd = open("/proc/self/stat", O_RDONLY);
+  int fd = open(FILE_TO_READ, O_RDONLY);
   ASSERT_GT(fd, 0);
   int sz = readv(fd, iov, 2);
   ASSERT_GE(sz, 0);
-  ASSERT_LT(sz, 5 + 2000);
+  ASSERT_LE(sz, 5 + 2000);
   ASSERT_GT((size_t)sz, iov[0].iov_len);
   EXPECT_POISONED(buf[0]);
   EXPECT_NOT_POISONED(buf[1]);
@@ -627,11 +646,11 @@ TEST(MemorySanitizer, preadv) {
   iov[0].iov_len = 5;
   iov[1].iov_base = buf + 10;
   iov[1].iov_len = 2000;
-  int fd = open("/proc/self/stat", O_RDONLY);
+  int fd = open(FILE_TO_READ, O_RDONLY);
   ASSERT_GT(fd, 0);
   int sz = preadv(fd, iov, 2, 3);
   ASSERT_GE(sz, 0);
-  ASSERT_LT(sz, 5 + 2000);
+  ASSERT_LE(sz, 5 + 2000);
   ASSERT_GT((size_t)sz, iov[0].iov_len);
   EXPECT_POISONED(buf[0]);
   EXPECT_NOT_POISONED(buf[1]);
@@ -653,15 +672,14 @@ TEST(MemorySanitizer, DISABLED_ioctl) {
 
 TEST(MemorySanitizer, readlink) {
   char *x = new char[1000];
-  readlink("/proc/self/exe", x, 1000);
+  readlink(SYMLINK_TO_READ, x, 1000);
   EXPECT_NOT_POISONED(x[0]);
   delete [] x;
 }
 
-
 TEST(MemorySanitizer, stat) {
   struct stat* st = new struct stat;
-  int res = stat("/proc/self/stat", st);
+  int res = stat(FILE_TO_READ, st);
   ASSERT_EQ(0, res);
   EXPECT_NOT_POISONED(st->st_dev);
   EXPECT_NOT_POISONED(st->st_mode);
@@ -670,9 +688,9 @@ TEST(MemorySanitizer, stat) {
 
 TEST(MemorySanitizer, fstatat) {
   struct stat* st = new struct stat;
-  int dirfd = open("/proc/self", O_RDONLY);
+  int dirfd = open(DIR_TO_READ, O_RDONLY);
   ASSERT_GT(dirfd, 0);
-  int res = fstatat(dirfd, "stat", st, 0);
+  int res = fstatat(dirfd, SUBFILE_TO_READ, st, 0);
   ASSERT_EQ(0, res);
   EXPECT_NOT_POISONED(st->st_dev);
   EXPECT_NOT_POISONED(st->st_mode);
@@ -764,6 +782,8 @@ TEST(MemorySanitizer, poll) {
   close(pipefd[1]);
 }
 
+// There is no ppoll() on FreeBSD.
+#if !defined (__FreeBSD__)
 TEST(MemorySanitizer, ppoll) {
   int* pipefd = new int[2];
   int res = pipe(pipefd);
@@ -788,6 +808,7 @@ TEST(MemorySanitizer, ppoll) {
   close(pipefd[0]);
   close(pipefd[1]);
 }
+#endif
 
 TEST(MemorySanitizer, poll_positive) {
   int* pipefd = new int[2];
@@ -852,8 +873,11 @@ TEST(MemorySanitizer, accept) {
   res = fcntl(connect_socket, F_SETFL, O_NONBLOCK);
   ASSERT_EQ(0, res);
   res = connect(connect_socket, (struct sockaddr *)&sai, sizeof(sai));
-  ASSERT_EQ(-1, res);
-  ASSERT_EQ(EINPROGRESS, errno);
+  // On FreeBSD this connection completes immediately.
+  if (res != 0) {
+    ASSERT_EQ(-1, res);
+    ASSERT_EQ(EINPROGRESS, errno);
+  }
 
   __msan_poison(&sai, sizeof(sai));
   int new_sock = accept(listen_socket, (struct sockaddr *)&sai, &sz);
@@ -974,7 +998,6 @@ TEST(MemorySanitizer, recvmsg) {
   ASSERT_EQ(0, res);
   ASSERT_EQ(sizeof(client_sai), sz);
 
-  
   const char *s = "message text";
   struct iovec iov;
   iov.iov_base = (void *)s;
@@ -1158,7 +1181,7 @@ TEST(MemorySanitizer, shmctl) {
 
 TEST(MemorySanitizer, shmat) {
   void *p = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   ASSERT_NE(MAP_FAILED, p);
 
   ((char *)p)[10] = *GetPoisoned<U1>();
@@ -1214,6 +1237,16 @@ TEST(MemorySanitizer, confstr) {
   EXPECT_NOT_POISONED(buf2[res - 1]);
   EXPECT_POISONED(buf2[res]);
   ASSERT_EQ(res, strlen(buf2) + 1);
+}
+
+TEST(MemorySanitizer, opendir) {
+  DIR *dir = opendir(".");
+  closedir(dir);
+
+  char name[10] = ".";
+  __msan_poison(name, sizeof(name));
+  EXPECT_UMR(dir = opendir(name));
+  closedir(dir);
 }
 
 TEST(MemorySanitizer, readdir) {
@@ -1539,55 +1572,74 @@ TEST(MemorySanitizer, strncat_overflow) {  // NOLINT
   EXPECT_POISONED(a[7]);
 }
 
-#define TEST_STRTO_INT(func_name)          \
-  TEST(MemorySanitizer, func_name) {       \
-    char *e;                               \
-    EXPECT_EQ(1U, func_name("1", &e, 10)); \
-    EXPECT_NOT_POISONED((S8)e);            \
+#define TEST_STRTO_INT(func_name, char_type, str_prefix) \
+  TEST(MemorySanitizer, func_name) {                     \
+    char_type *e;                                        \
+    EXPECT_EQ(1U, func_name(str_prefix##"1", &e, 10));   \
+    EXPECT_NOT_POISONED((S8)e);                          \
   }
 
-#define TEST_STRTO_FLOAT(func_name)     \
-  TEST(MemorySanitizer, func_name) {    \
-    char *e;                            \
-    EXPECT_NE(0, func_name("1.5", &e)); \
-    EXPECT_NOT_POISONED((S8)e);         \
+#define TEST_STRTO_FLOAT(func_name, char_type, str_prefix) \
+  TEST(MemorySanitizer, func_name) {                       \
+    char_type *e;                                          \
+    EXPECT_NE(0, func_name(str_prefix##"1.5", &e));        \
+    EXPECT_NOT_POISONED((S8)e);                            \
   }
 
-#define TEST_STRTO_FLOAT_LOC(func_name)                          \
+#define TEST_STRTO_FLOAT_LOC(func_name, char_type, str_prefix)   \
   TEST(MemorySanitizer, func_name) {                             \
     locale_t loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0); \
-    char *e;                                                     \
-    EXPECT_NE(0, func_name("1.5", &e, loc));                     \
+    char_type *e;                                                \
+    EXPECT_NE(0, func_name(str_prefix##"1.5", &e, loc));         \
     EXPECT_NOT_POISONED((S8)e);                                  \
     freelocale(loc);                                             \
   }
 
-#define TEST_STRTO_INT_LOC(func_name)                            \
+#define TEST_STRTO_INT_LOC(func_name, char_type, str_prefix)     \
   TEST(MemorySanitizer, func_name) {                             \
     locale_t loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0); \
-    char *e;                                                     \
-    ASSERT_EQ(1U, func_name("1", &e, 10, loc));                  \
+    char_type *e;                                                \
+    ASSERT_EQ(1U, func_name(str_prefix##"1", &e, 10, loc));      \
     EXPECT_NOT_POISONED((S8)e);                                  \
     freelocale(loc);                                             \
   }
 
-TEST_STRTO_INT(strtol)
-TEST_STRTO_INT(strtoll)
-TEST_STRTO_INT(strtoul)
-TEST_STRTO_INT(strtoull)
+TEST_STRTO_INT(strtol, char, )
+TEST_STRTO_INT(strtoll, char, )
+TEST_STRTO_INT(strtoul, char, )
+TEST_STRTO_INT(strtoull, char, )
 
-TEST_STRTO_FLOAT(strtof)
-TEST_STRTO_FLOAT(strtod)
-TEST_STRTO_FLOAT(strtold)
+TEST_STRTO_FLOAT(strtof, char, )
+TEST_STRTO_FLOAT(strtod, char, )
+TEST_STRTO_FLOAT(strtold, char, )
 
-TEST_STRTO_FLOAT_LOC(strtof_l)
-TEST_STRTO_FLOAT_LOC(strtod_l)
-TEST_STRTO_FLOAT_LOC(strtold_l)
+TEST_STRTO_FLOAT_LOC(strtof_l, char, )
+TEST_STRTO_FLOAT_LOC(strtod_l, char, )
+TEST_STRTO_FLOAT_LOC(strtold_l, char, )
 
-TEST_STRTO_INT_LOC(strtol_l)
-TEST_STRTO_INT_LOC(strtoll_l)
-TEST_STRTO_INT_LOC(strtoul_l)
-TEST_STRTO_INT_LOC(strtoull_l)
+TEST_STRTO_INT_LOC(strtol_l, char, )
+TEST_STRTO_INT_LOC(strtoll_l, char, )
+TEST_STRTO_INT_LOC(strtoul_l, char, )
+TEST_STRTO_INT_LOC(strtoull_l, char, )
+
+TEST_STRTO_INT(wcstol, wchar_t, L)
+TEST_STRTO_INT(wcstoll, wchar_t, L)
+TEST_STRTO_INT(wcstoul, wchar_t, L)
+TEST_STRTO_INT(wcstoull, wchar_t, L)
+
+TEST_STRTO_FLOAT(wcstof, wchar_t, L)
+TEST_STRTO_FLOAT(wcstod, wchar_t, L)
+TEST_STRTO_FLOAT(wcstold, wchar_t, L)
+
+TEST_STRTO_FLOAT_LOC(wcstof_l, wchar_t, L)
+TEST_STRTO_FLOAT_LOC(wcstod_l, wchar_t, L)
+TEST_STRTO_FLOAT_LOC(wcstold_l, wchar_t, L)
+
+TEST_STRTO_INT_LOC(wcstol_l, wchar_t, L)
+TEST_STRTO_INT_LOC(wcstoll_l, wchar_t, L)
+TEST_STRTO_INT_LOC(wcstoul_l, wchar_t, L)
+TEST_STRTO_INT_LOC(wcstoull_l, wchar_t, L)
+
 
 TEST(MemorySanitizer, strtoimax) {
   char *e;
@@ -1603,12 +1655,20 @@ TEST(MemorySanitizer, strtoumax) {
 
 #ifdef __GLIBC__
 extern "C" float __strtof_l(const char *nptr, char **endptr, locale_t loc);
-TEST_STRTO_FLOAT_LOC(__strtof_l)
+TEST_STRTO_FLOAT_LOC(__strtof_l, char, )
 extern "C" double __strtod_l(const char *nptr, char **endptr, locale_t loc);
-TEST_STRTO_FLOAT_LOC(__strtod_l)
+TEST_STRTO_FLOAT_LOC(__strtod_l, char, )
 extern "C" long double __strtold_l(const char *nptr, char **endptr,
                                    locale_t loc);
-TEST_STRTO_FLOAT_LOC(__strtold_l)
+TEST_STRTO_FLOAT_LOC(__strtold_l, char, )
+
+extern "C" float __wcstof_l(const wchar_t *nptr, wchar_t **endptr, locale_t loc);
+TEST_STRTO_FLOAT_LOC(__wcstof_l, wchar_t, L)
+extern "C" double __wcstod_l(const wchar_t *nptr, wchar_t **endptr, locale_t loc);
+TEST_STRTO_FLOAT_LOC(__wcstod_l, wchar_t, L)
+extern "C" long double __wcstold_l(const wchar_t *nptr, wchar_t **endptr,
+                                   locale_t loc);
+TEST_STRTO_FLOAT_LOC(__wcstold_l, wchar_t, L)
 #endif  // __GLIBC__
 
 TEST(MemorySanitizer, modf) {
@@ -1832,6 +1892,16 @@ TEST(MemorySanitizer, wcsnrtombs) {
   EXPECT_EQ(buff[0], 'a');
   EXPECT_EQ(buff[1], 'b');
   EXPECT_POISONED(buff[2]);
+}
+
+TEST(MemorySanitizer, wmemset) {
+    wchar_t x[25];
+    break_optimization(x);
+    EXPECT_POISONED(x[0]);
+    wmemset(x, L'A', 10);
+    EXPECT_EQ(x[0], L'A');
+    EXPECT_EQ(x[9], L'A');
+    EXPECT_POISONED(x[10]);
 }
 
 TEST(MemorySanitizer, mbtowc) {
@@ -3561,7 +3631,7 @@ TEST(MemorySanitizer, UnalignedStore64_precise2) {
   EXPECT_POISONED_O(x[11], originx3);
 }
 
-#if defined(__clang__)
+#if (defined(__x86_64__) && defined(__clang__))
 namespace {
 typedef U1 V16x8 __attribute__((__vector_size__(16)));
 typedef U2 V8x16 __attribute__((__vector_size__(16)));
@@ -3743,8 +3813,7 @@ struct S {
   U2 b;
 };
 
-// http://code.google.com/p/memory-sanitizer/issues/detail?id=6
-TEST(MemorySanitizerOrigins, DISABLED_InitializedStoreDoesNotChangeOrigin) {
+TEST(MemorySanitizerOrigins, InitializedStoreDoesNotChangeOrigin) {
   if (!TrackingOrigins()) return;
 
   S s;
@@ -4081,7 +4150,8 @@ TEST(MemorySanitizer, LargeAllocatorUnpoisonsOnFree) {
 
   // Allocate the page that was released to the OS in free() with the real mmap,
   // bypassing the interceptor.
-  char *q = (char *)real_mmap(p, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+  char *q = (char *)real_mmap(p, 4096, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   ASSERT_NE((char *)0, q);
 
   ASSERT_TRUE(q <= p);

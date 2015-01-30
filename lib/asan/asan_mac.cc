@@ -102,7 +102,6 @@ void LeakyResetEnv(const char *name, const char *name_value) {
 }
 
 void MaybeReexec() {
-  if (!flags()->allow_reexec) return;
   // Make sure the dynamic ASan runtime library is preloaded so that the
   // wrappers work. If it is not, set DYLD_INSERT_LIBRARIES and re-exec
   // ourselves.
@@ -140,8 +139,15 @@ void MaybeReexec() {
     VReport(1, "exec()-ing the program with\n");
     VReport(1, "%s=%s\n", kDyldInsertLibraries, new_env);
     VReport(1, "to enable ASan wrappers.\n");
-    VReport(1, "Set ASAN_OPTIONS=allow_reexec=0 to disable this.\n");
     execv(program_name, *_NSGetArgv());
+
+    // We get here only if execv() failed.
+    Report("ERROR: The process is launched without DYLD_INSERT_LIBRARIES, "
+           "which is required for ASan to work. ASan tried to set the "
+           "environment variable and re-execute itself, but execv() failed, "
+           "possibly because of sandbox restrictions. Make sure to launch the "
+           "executable with:\n%s=%s\n", kDyldInsertLibraries, new_env);
+    CHECK("execv failed" && 0);
   } else {
     // DYLD_INSERT_LIBRARIES is set and contains the runtime library.
     if (old_env_len == fname_len) {
@@ -205,11 +211,6 @@ void AsanCheckDynamicRTPrereqs() {}
 // No-op. Mac does not support static linkage anyway.
 void AsanCheckIncompatibleRT() {}
 
-bool AsanInterceptsSignal(int signum) {
-  return (signum == SIGSEGV || signum == SIGBUS) &&
-         common_flags()->handle_segv;
-}
-
 void AsanPlatformThreadInit() {
 }
 
@@ -264,9 +265,8 @@ ALWAYS_INLINE
 void asan_register_worker_thread(int parent_tid, StackTrace *stack) {
   AsanThread *t = GetCurrentThread();
   if (!t) {
-    t = AsanThread::Create(0, 0);
-    CreateThreadContextArgs args = { t, stack };
-    asanThreadRegistry().CreateThread(*(uptr*)t, true, parent_tid, &args);
+    t = AsanThread::Create(/* start_routine */ nullptr, /* arg */ nullptr,
+                           parent_tid, stack, /* detached */ true);
     t->Init();
     asanThreadRegistry().StartThread(t->tid(), 0, 0);
     SetCurrentThread(t);
@@ -313,7 +313,7 @@ asan_block_context_t *alloc_asan_context(void *ctxt, dispatch_function_t func,
                                   dispatch_function_t func) {                 \
     GET_STACK_TRACE_THREAD;                                                   \
     asan_block_context_t *asan_ctxt = alloc_asan_context(ctxt, func, &stack); \
-    if (common_flags()->verbosity >= 2) {                                     \
+    if (Verbosity() >= 2) {                                     \
       Report(#dispatch_x_f "(): context: %p, pthread_self: %p\n",             \
              asan_ctxt, pthread_self());                                      \
       PRINT_CURRENT_STACK();                                                  \
@@ -331,7 +331,7 @@ INTERCEPTOR(void, dispatch_after_f, dispatch_time_t when,
                                     dispatch_function_t func) {
   GET_STACK_TRACE_THREAD;
   asan_block_context_t *asan_ctxt = alloc_asan_context(ctxt, func, &stack);
-  if (common_flags()->verbosity >= 2) {
+  if (Verbosity() >= 2) {
     Report("dispatch_after_f: %p\n", asan_ctxt);
     PRINT_CURRENT_STACK();
   }
@@ -344,7 +344,7 @@ INTERCEPTOR(void, dispatch_group_async_f, dispatch_group_t group,
                                           dispatch_function_t func) {
   GET_STACK_TRACE_THREAD;
   asan_block_context_t *asan_ctxt = alloc_asan_context(ctxt, func, &stack);
-  if (common_flags()->verbosity >= 2) {
+  if (Verbosity() >= 2) {
     Report("dispatch_group_async_f(): context: %p, pthread_self: %p\n",
            asan_ctxt, pthread_self());
     PRINT_CURRENT_STACK();
@@ -374,13 +374,6 @@ void dispatch_source_set_event_handler(dispatch_source_t ds, void(^work)(void));
     work(); \
   }
 
-// Forces the compiler to generate a frame pointer in the function.
-#define ENABLE_FRAME_POINTER                                       \
-  do {                                                             \
-    volatile uptr enable_fp;                                       \
-    enable_fp = GET_CURRENT_FRAME();                               \
-  } while (0)
-
 INTERCEPTOR(void, dispatch_async,
             dispatch_queue_t dq, void(^work)(void)) {
   ENABLE_FRAME_POINTER;
@@ -404,6 +397,10 @@ INTERCEPTOR(void, dispatch_after,
 
 INTERCEPTOR(void, dispatch_source_set_cancel_handler,
             dispatch_source_t ds, void(^work)(void)) {
+  if (!work) {
+    REAL(dispatch_source_set_cancel_handler)(ds, work);
+    return;
+  }
   ENABLE_FRAME_POINTER;
   GET_ASAN_BLOCK(work);
   REAL(dispatch_source_set_cancel_handler)(ds, asan_block);
