@@ -171,8 +171,15 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
   do {                                                         \
   } while (false)
 #define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
+// Strict init-order checking is dlopen-hostile:
+// https://code.google.com/p/address-sanitizer/issues/detail?id=178
+#define COMMON_INTERCEPTOR_ON_DLOPEN(filename, flag)                           \
+  if (flags()->strict_init_order) {                                            \
+    StopInitOrderChecking();                                                   \
+  }
 #define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit()
-#define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, res) CoverageUpdateMapping()
+#define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
+  CoverageUpdateMapping()
 #define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() CoverageUpdateMapping()
 #define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!asan_inited)
 #include "sanitizer_common/sanitizer_common_interceptors.inc"

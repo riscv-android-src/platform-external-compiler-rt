@@ -111,7 +111,7 @@ class FlagHandlerKeepGoing : public FlagHandlerBase {
  public:
   explicit FlagHandlerKeepGoing(bool *halt_on_error)
       : halt_on_error_(halt_on_error) {}
-  bool Parse(const char *value) {
+  bool Parse(const char *value) final {
     bool tmp;
     FlagHandler<bool> h(&tmp);
     if (!h.Parse(value)) return false;
@@ -120,7 +120,7 @@ class FlagHandlerKeepGoing : public FlagHandlerBase {
   }
 };
 
-void RegisterMsanFlags(FlagParser *parser, Flags *f) {
+static void RegisterMsanFlags(FlagParser *parser, Flags *f) {
 #define MSAN_FLAG(Type, Name, DefaultValue, Description) \
   RegisterFlag(parser, #Name, Description, &f->Name);
 #include "msan_flags.inc"
@@ -132,7 +132,8 @@ void RegisterMsanFlags(FlagParser *parser, Flags *f) {
                           "deprecated, use halt_on_error");
 }
 
-static void InitializeFlags(Flags *f, const char *options) {
+static void InitializeFlags() {
+  Flags *f = flags();
   FlagParser parser;
   RegisterMsanFlags(&parser, f);
   RegisterCommonFlags(&parser);
@@ -156,7 +157,9 @@ static void InitializeFlags(Flags *f, const char *options) {
   if (__msan_default_options)
     parser.ParseString(__msan_default_options());
 
-  parser.ParseString(options);
+  const char *msan_options = GetEnv("MSAN_OPTIONS");
+  parser.ParseString(msan_options);
+  VPrintf(1, "MSAN_OPTIONS: %s\n", msan_options ? msan_options : "<empty>");
 
   SetVerbosity(common_flags()->verbosity);
 
@@ -351,8 +354,7 @@ void __msan_init() {
   SetDieCallback(MsanDie);
   InitTlsSize();
 
-  const char *msan_options = GetEnv("MSAN_OPTIONS");
-  InitializeFlags(&msan_flags, msan_options);
+  InitializeFlags();
   __sanitizer_set_report_path(common_flags()->log_path);
 
   InitializeInterceptors();
@@ -368,8 +370,6 @@ void __msan_init() {
     SetStackSizeLimitInBytes(32 * 1024 * 1024);
     ReExec();
   }
-
-  VPrintf(1, "MSAN_OPTIONS: %s\n", msan_options ? msan_options : "<empty>");
 
   __msan_clear_on_return();
   if (__msan_get_track_origins())
@@ -541,6 +541,13 @@ u32 __msan_get_origin(const void *a) {
   uptr aligned = x & ~3ULL;
   uptr origin_ptr = MEM_TO_ORIGIN(aligned);
   return *(u32*)origin_ptr;
+}
+
+int __msan_origin_is_descendant_or_same(u32 this_id, u32 prev_id) {
+  Origin o = Origin::FromRawId(this_id);
+  while (o.raw_id() != prev_id && o.isChainedOrigin())
+    o = o.getNextChainedOrigin(nullptr);
+  return o.raw_id() == prev_id;
 }
 
 u32 __msan_get_umr_origin() {
