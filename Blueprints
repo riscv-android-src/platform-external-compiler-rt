@@ -357,6 +357,8 @@ cc_library {
     clang: true,
     cflags: ["-std=gnu99"],
 
+    stl: "none",
+
     asan: false,
 }
 
