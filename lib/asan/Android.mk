@@ -23,8 +23,9 @@ ASAN_FLEXIBLE_MAPPING_AND_OFFSET=0
 
 asan_rtl_files := \
   asan_activation.cc \
-  asan_allocator2.cc \
+  asan_allocator.cc \
   asan_fake_stack.cc \
+  asan_flags.cc \
   asan_globals.cc \
   asan_interceptors.cc \
   asan_linux.cc \
@@ -38,6 +39,7 @@ asan_rtl_files := \
   asan_rtl.cc \
   asan_stack.cc \
   asan_stats.cc \
+  asan_suppressions.cc \
   asan_thread.cc \
   asan_win.cc \
   ../interception/interception_linux.cc \
@@ -51,6 +53,7 @@ asan_rtl_files := \
   ../sanitizer_common/sanitizer_deadlock_detector1.cc \
   ../sanitizer_common/sanitizer_deadlock_detector2.cc \
   ../sanitizer_common/sanitizer_flags.cc \
+  ../sanitizer_common/sanitizer_flag_parser.cc \
   ../sanitizer_common/sanitizer_libc.cc \
   ../sanitizer_common/sanitizer_libignore.cc \
   ../sanitizer_common/sanitizer_linux.cc \
@@ -76,6 +79,7 @@ asan_rtl_files := \
   ../sanitizer_common/sanitizer_symbolizer_libbacktrace.cc \
   ../sanitizer_common/sanitizer_symbolizer_libcdep.cc \
   ../sanitizer_common/sanitizer_symbolizer_posix_libcdep.cc \
+  ../sanitizer_common/sanitizer_symbolizer_process_libcdep.cc \
   ../sanitizer_common/sanitizer_symbolizer_win.cc \
   ../sanitizer_common/sanitizer_thread_registry.cc \
   ../sanitizer_common/sanitizer_tls_get_addr.cc \
@@ -96,7 +100,8 @@ asan_rtl_cflags := \
 	-Wno-non-virtual-dtor \
 	-Wno-sign-compare \
 	-Wno-unused-parameter \
-	-std=c++11
+	-std=c++11 \
+	-fno-rtti \
 
 asan_test_files := \
 	tests/asan_globals_test.cc \
@@ -137,10 +142,11 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ADDRESS_SANITIZER := false
 include $(BUILD_STATIC_LIBRARY)
 
+define build-asan-rt-shared-library
 
 include $(CLEAR_VARS)
-
-LOCAL_MODULE := $(ADDRESS_SANITIZER_RUNTIME_LIBRARY)
+LOCAL_MODULE := $(1)
+LOCAL_MULTILIB := $(2)
 LOCAL_MODULE_TAGS := eng
 LOCAL_C_INCLUDES := \
   external/compiler-rt/lib \
@@ -150,11 +156,24 @@ LOCAL_SRC_FILES := $(asan_rtl_files) $(asan_rtl_cxx_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SHARED_LIBRARIES := liblog libc libdl
 LOCAL_STATIC_LIBRARIES := libcompiler_rt
+# MacOS toolchain is out-of-date and does not support -z global.
+# TODO: re-enable once the toolchain issue is fixed.
+ifneq ($(HOST_OS),darwin)
+  LOCAL_LDFLAGS += -Wl,-z,global
+endif
 LOCAL_CLANG := true
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_SHARED_LIBRARY)
 
+endef
+
+ifdef 2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY
+  $(eval $(call build-asan-rt-shared-library,$(ADDRESS_SANITIZER_RUNTIME_LIBRARY),64))
+  $(eval $(call build-asan-rt-shared-library,$(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY),32))
+else
+  $(eval $(call build-asan-rt-shared-library,$(ADDRESS_SANITIZER_RUNTIME_LIBRARY),32))
+endif
 
 include $(CLEAR_VARS)
 
@@ -182,6 +201,7 @@ LOCAL_C_INCLUDES := \
     external/compiler-rt/lib/asan/tests \
     external/compiler-rt/lib/sanitizer_common/tests
 LOCAL_CFLAGS += \
+    -Wno-non-virtual-dtor \
     -Wno-unused-parameter \
     -Wno-sign-compare \
     -DASAN_UAR=0 \
@@ -248,8 +268,6 @@ LOCAL_SRC_FILES := $(asan_rtl_cxx_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
 LOCAL_MULTILIB := both
-LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
-LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ADDRESS_SANITIZER := false
 include $(BUILD_HOST_STATIC_LIBRARY)
