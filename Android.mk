@@ -319,8 +319,24 @@ LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libcompiler_rt_extras_SRC_FILES)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ADDRESS_SANITIZER := false
+LOCAL_CXX_STL := none
 
 include $(BUILD_STATIC_LIBRARY)
+
+#=====================================================================
+# Host Static Library: libcompiler_rt-extras
+#=====================================================================
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libcompiler_rt-extras
+LOCAL_CLANG := true
+LOCAL_SRC_FILES := $(libcompiler_rt_extras_SRC_FILES)
+LOCAL_ADDRESS_SANITIZER := false
+LOCAL_MULTILIB := both
+LOCAL_CXX_STL := none
+
+include $(BUILD_HOST_STATIC_LIBRARY)
 
 # Don't build compiler-rt without clang
 ifneq ($(WITHOUT_TARGET_CLANG), true)
@@ -344,6 +360,7 @@ LOCAL_SRC_FILES_x86_64 := $(call get-libcompiler-rt-source-files,x86_64)
 LOCAL_MODULE_TARGET_ARCH := arm arm64 mips mips64 x86 x86_64
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ADDRESS_SANITIZER := false
+LOCAL_CXX_STL := none
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -360,6 +377,7 @@ LOCAL_SRC_FILES := $(call get-libcompiler-rt-source-files,x86_64)
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MULTILIB := both
+LOCAL_CXX_STL := none
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -373,6 +391,7 @@ LOCAL_MODULE = libprofile_rt
 LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_MULTILIB := both
+LOCAL_CXX_STL := none
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -387,6 +406,7 @@ LOCAL_CLANG := true
 LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_MULTILIB := both
+LOCAL_CXX_STL := none
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -408,6 +428,7 @@ LOCAL_STATIC_LIBRARIES_x86 := libunwindbacktrace
 LOCAL_STATIC_LIBRARIES_x86_64 := libunwindbacktrace
 LOCAL_MODULE_TARGET_ARCH := arm arm64 mips mips64 x86 x86_64
 LOCAL_ADDRESS_SANITIZER := false
+LOCAL_CXX_STL := none
 
 include $(BUILD_SHARED_LIBRARY)
 
@@ -430,6 +451,7 @@ LOCAL_LDLIBS := -lpthread -lc -lm
 endif
 LOCAL_MULTILIB := both
 LOCAL_ADDRESS_SANITIZER := false
+LOCAL_CXX_STL := none
 
 include $(BUILD_HOST_SHARED_LIBRARY)
 

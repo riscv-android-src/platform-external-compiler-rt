@@ -100,7 +100,8 @@ asan_rtl_cflags := \
 	-Wno-non-virtual-dtor \
 	-Wno-sign-compare \
 	-Wno-unused-parameter \
-	-std=c++11
+	-std=c++11 \
+	-fno-rtti \
 
 asan_test_files := \
 	tests/asan_globals_test.cc \
@@ -128,7 +129,6 @@ ifeq ($(TARGET_ARCH),arm)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libasan
-LOCAL_MODULE_TAGS := optional
 LOCAL_C_INCLUDES := \
     external/compiler-rt/lib \
     external/compiler-rt/include
@@ -141,11 +141,11 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ADDRESS_SANITIZER := false
 include $(BUILD_STATIC_LIBRARY)
 
+define build-asan-rt-shared-library
 
 include $(CLEAR_VARS)
-
-LOCAL_MODULE := $(ADDRESS_SANITIZER_RUNTIME_LIBRARY)
-LOCAL_MODULE_TAGS := eng
+LOCAL_MODULE := $(1)
+LOCAL_MULTILIB := $(2)
 LOCAL_C_INCLUDES := \
   external/compiler-rt/lib \
   external/compiler-rt/include
@@ -154,16 +154,28 @@ LOCAL_SRC_FILES := $(asan_rtl_files) $(asan_rtl_cxx_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SHARED_LIBRARIES := liblog libc libdl
 LOCAL_STATIC_LIBRARIES := libcompiler_rt
+# MacOS toolchain is out-of-date and does not support -z global.
+# TODO: re-enable once the toolchain issue is fixed.
+ifneq ($(HOST_OS),darwin)
+  LOCAL_LDFLAGS += -Wl,-z,global
+endif
 LOCAL_CLANG := true
 LOCAL_ADDRESS_SANITIZER := false
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_SHARED_LIBRARY)
 
+endef
+
+ifdef 2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY
+  $(eval $(call build-asan-rt-shared-library,$(ADDRESS_SANITIZER_RUNTIME_LIBRARY),64))
+  $(eval $(call build-asan-rt-shared-library,$(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY),32))
+else
+  $(eval $(call build-asan-rt-shared-library,$(ADDRESS_SANITIZER_RUNTIME_LIBRARY),32))
+endif
 
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := asanwrapper
-LOCAL_MODULE_TAGS := eng
 LOCAL_SRC_FILES := asanwrapper.cc
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CPPFLAGS := -std=c++11
@@ -233,7 +245,6 @@ endif # ifeq($(TARGET_ARCH),arm)
 ifneq ($(HOST_OS),darwin)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libasan
-LOCAL_MODULE_TAGS := eng
 LOCAL_C_INCLUDES := external/compiler-rt/lib external/compiler-rt/include
 LOCAL_CFLAGS += $(asan_rtl_cflags)
 LOCAL_SRC_FILES := $(asan_rtl_files)
@@ -246,15 +257,12 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libasan_cxx
-LOCAL_MODULE_TAGS := eng
 LOCAL_C_INCLUDES := external/compiler-rt/lib external/compiler-rt/include
 LOCAL_CFLAGS += $(asan_rtl_cflags)
 LOCAL_SRC_FILES := $(asan_rtl_cxx_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
 LOCAL_MULTILIB := both
-LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
-LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_ADDRESS_SANITIZER := false
 include $(BUILD_HOST_STATIC_LIBRARY)
