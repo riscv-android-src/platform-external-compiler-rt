@@ -319,25 +319,6 @@ cc_library {
                 "-lib/builtins/floatundidf.c",
             ],
         },
-    } + {
-        arm: {
-            static_libs: ["libunwind_llvm"],
-        },
-        arm64: {
-            static_libs: ["libunwindbacktrace"],
-        },
-        mips: {
-            static_libs: ["libunwindbacktrace"],
-        },
-        mips64: {
-            static_libs: ["libunwindbacktrace"],
-        },
-        x86: {
-            static_libs: ["libunwindbacktrace"],
-        },
-        x86_64: {
-            static_libs: ["libunwindbacktrace"],
-        },
     },
 
     target: {
@@ -348,6 +329,27 @@ cc_library {
         android: {
             srcs: ["lib/builtins/enable_execute_stack.c"],
             shared_libs: ["libdl"],
+        },
+        android_arm: {
+            static_libs: ["libunwind_llvm"],
+        },
+        android_arm64: {
+            static_libs: ["libunwindbacktrace"],
+        },
+        android_mips: {
+            static_libs: ["libunwindbacktrace"],
+        },
+        android_mips64: {
+            static_libs: ["libunwindbacktrace"],
+        },
+        android_x86: {
+            static_libs: ["libunwindbacktrace"],
+        },
+        android_x86_64: {
+            static_libs: ["libunwindbacktrace"],
+        },
+        linux: {
+            static_libs: ["libunwindbacktrace"],
         },
     },
 
