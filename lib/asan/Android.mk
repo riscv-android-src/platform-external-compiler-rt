@@ -138,7 +138,7 @@ LOCAL_SRC_FILES := asan_preinit.cc
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 include $(BUILD_STATIC_LIBRARY)
 
 define build-asan-rt-shared-library
@@ -157,13 +157,16 @@ LOCAL_SRC_FILES := $(asan_rtl_files) $(asan_rtl_cxx_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SHARED_LIBRARIES := liblog libc libdl
 LOCAL_STATIC_LIBRARIES := libcompiler_rt libubsan
+LOCAL_STATIC_LIBRARIES_arm := libunwind_llvm
+LOCAL_LDFLAGS_arm := -Wl,--exclude-libs,libunwind_llvm.a
 # MacOS toolchain is out-of-date and does not support -z global.
 # TODO: re-enable once the toolchain issue is fixed.
 ifneq ($(HOST_OS),darwin)
   LOCAL_LDFLAGS += -Wl,-z,global
 endif
 LOCAL_CLANG := true
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
+LOCAL_CXX_STL := none
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_SHARED_LIBRARY)
 
@@ -183,7 +186,7 @@ LOCAL_SRC_FILES := asanwrapper.cc
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CPPFLAGS := -std=c++11
 LOCAL_SHARED_LIBRARIES += libc
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CXX_STL := libc++
 
@@ -212,7 +215,7 @@ LOCAL_CFLAGS += \
 LOCAL_SRC_FILES := tests/asan_noinst_test.cc tests/asan_test_main.cc
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CXX_STL := libc++
 
@@ -233,7 +236,7 @@ LOCAL_SRC_FILES := $(asan_test_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_STATIC_LIBRARIES := libgtest libasan_noinst_test
 LOCAL_SHARED_LIBRARIES := libc
-LOCAL_ADDRESS_SANITIZER := true
+LOCAL_SANITIZE := address
 LOCAL_CLANG := true
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CXX_STL := libc++
@@ -255,7 +258,7 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
 LOCAL_MULTILIB := both
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 LOCAL_WHOLE_STATIC_LIBRARIES := libubsan
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -268,7 +271,7 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
 LOCAL_MULTILIB := both
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -294,7 +297,7 @@ LOCAL_CLANG := true
 LOCAL_CXX_STL := libc++
 LOCAL_MULTILIB := both
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_ADDRESS_SANITIZER := false
+LOCAL_SANITIZE := never
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -308,7 +311,7 @@ LOCAL_CFLAGS += $(asan_test_cflags)
 LOCAL_SRC_FILES := $(asan_test_files)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_STATIC_LIBRARIES := libasan_noinst_test
-LOCAL_ADDRESS_SANITIZER := true
+LOCAL_SANITIZE := address
 LOCAL_CLANG := true
 LOCAL_CXX_STL := libc++
 LOCAL_MULTILIB := both
