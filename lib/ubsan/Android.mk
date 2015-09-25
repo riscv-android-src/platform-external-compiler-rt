@@ -27,6 +27,8 @@ ubsan_rtl_files := \
 ubsan_cxx_rtl_files := \
     ubsan_handlers_cxx.cc \
     ubsan_type_hash.cc \
+    ubsan_type_hash_itanium.cc \
+    ubsan_type_hash_win.cc \
 
 ubsan_rtl_cppflags := \
     -fvisibility=hidden \
