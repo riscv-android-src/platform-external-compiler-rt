@@ -325,6 +325,10 @@ define get-libcompiler-rt-x86_64-source-files
       $(libcompiler_rt_x86_64_SRC_FILES),x86_64)
 endef
 
+libcompiler_rt_common_CFLAGS := \
+  -Wno-unused-parameter \
+  -Werror
+
 #=====================================================================
 # Device Static Library: libcompiler_rt-extras
 #=====================================================================
@@ -334,6 +338,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcompiler_rt-extras
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libcompiler_rt_extras_SRC_FILES)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
@@ -349,6 +354,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libcompiler_rt-extras
+LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libcompiler_rt_extras_SRC_FILES)
 LOCAL_SANITIZE := never
@@ -368,6 +374,7 @@ ifneq ($(WITHOUT_TARGET_CLANG), true)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libcompiler_rt
+LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_CFLAGS_arm += -D__ARM_EABI__
 LOCAL_CFLAGS_mips64 += -DCRT_HAS_128BIT -DCRT_LDBL_128BIT
 LOCAL_ASFLAGS := -integrated-as
@@ -394,6 +401,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libcompiler_rt
+LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_ASFLAGS := -integrated-as
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(call get-libcompiler-rt-source-files,x86_64)
@@ -414,6 +422,7 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE = libprofile_rt
+LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
 LOCAL_SANITIZE := never
 LOCAL_MULTILIB := both
@@ -428,6 +437,7 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE = libprofile_rt
+LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_CLANG := true
 LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
 LOCAL_SANITIZE := never
