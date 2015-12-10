@@ -442,7 +442,8 @@ LOCAL_CLANG := true
 LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
 LOCAL_SANITIZE := never
 LOCAL_MULTILIB := both
-LOCAL_CXX_STL := none
+LOCAL_NDK_STL_VARIANT := none
+LOCAL_SDK_VERSION := 21
 
 include $(BUILD_STATIC_LIBRARY)
 
