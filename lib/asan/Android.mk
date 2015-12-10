@@ -137,6 +137,8 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_CLANG := true
 LOCAL_SANITIZE := never
 LOCAL_MODULE_TARGET_ARCH := arm arm64 x86
+LOCAL_NDK_STL_VARIANT := none
+LOCAL_SDK_VERSION := 19
 include $(BUILD_STATIC_LIBRARY)
 
 define build-asan-rt-shared-library
@@ -158,10 +160,8 @@ LOCAL_C_INCLUDES := \
 LOCAL_CFLAGS += $(asan_rtl_cflags)
 LOCAL_SRC_FILES := $(asan_rtl_files) $(asan_rtl_cxx_files)
 LOCAL_CPP_EXTENSION := .cc
-LOCAL_SHARED_LIBRARIES := liblog libc libdl
-LOCAL_STATIC_LIBRARIES := libcompiler_rt libubsan
-LOCAL_STATIC_LIBRARIES_arm := libunwind_llvm
-LOCAL_LDFLAGS_arm := -Wl,--exclude-libs,libunwind_llvm.a
+LOCAL_LDLIBS := -llog -ldl
+LOCAL_STATIC_LIBRARIES := libubsan
 # MacOS toolchain is out-of-date and does not support -z global.
 # TODO: re-enable once the toolchain issue is fixed.
 ifneq ($(HOST_OS),darwin)
@@ -170,7 +170,8 @@ endif
 LOCAL_CLANG := true
 LOCAL_SANITIZE := never
 LOCAL_MODULE_TARGET_ARCH := arm arm64 x86
-LOCAL_CXX_STL := none
+LOCAL_NDK_STL_VARIANT := none
+LOCAL_SDK_VERSION := 19
 include $(BUILD_SHARED_LIBRARY)
 
 endef
@@ -188,7 +189,6 @@ LOCAL_MODULE := asanwrapper
 LOCAL_SRC_FILES := asanwrapper.cc
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CPPFLAGS := -std=c++11
-LOCAL_SHARED_LIBRARIES += libc
 LOCAL_SANITIZE := never
 LOCAL_MODULE_TARGET_ARCH := arm arm64 x86
 LOCAL_CXX_STL := libc++
