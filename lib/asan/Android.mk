@@ -79,7 +79,6 @@ asan_rtl_files := \
   ../sanitizer_common/sanitizer_symbolizer_libbacktrace.cc \
   ../sanitizer_common/sanitizer_symbolizer_libcdep.cc \
   ../sanitizer_common/sanitizer_symbolizer_posix_libcdep.cc \
-  ../sanitizer_common/sanitizer_symbolizer_process_libcdep.cc \
   ../sanitizer_common/sanitizer_symbolizer_win.cc \
   ../sanitizer_common/sanitizer_thread_registry.cc \
   ../sanitizer_common/sanitizer_tls_get_addr.cc \
