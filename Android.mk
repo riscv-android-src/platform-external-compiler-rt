@@ -415,6 +415,16 @@ LOCAL_CXX_STL := none
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
+libprofile_rt_srcs := \
+    lib/profile/GCDAProfiling.c \
+    lib/profile/InstrProfiling.c \
+    lib/profile/InstrProfilingBuffer.c \
+    lib/profile/InstrProfilingFile.c \
+    lib/profile/InstrProfilingPlatformDarwin.c \
+    lib/profile/InstrProfilingPlatformOther.c \
+    lib/profile/InstrProfilingRuntime.cc \
+    lib/profile/InstrProfilingUtil.c \
+
 #=====================================================================
 # Host Static Library: libprofile_rt
 #=====================================================================
@@ -423,7 +433,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE = libprofile_rt
 LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
-LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
+LOCAL_SRC_FILES = $(libprofile_rt_srcs)
 LOCAL_SANITIZE := never
 LOCAL_MULTILIB := both
 LOCAL_CXX_STL := none
@@ -439,7 +449,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE = libprofile_rt
 LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_CLANG := true
-LOCAL_SRC_FILES = lib/profile/GCDAProfiling.c
+LOCAL_SRC_FILES = $(libprofile_rt_srcs)
 LOCAL_SANITIZE := never
 LOCAL_MULTILIB := both
 LOCAL_NDK_STL_VARIANT := none
