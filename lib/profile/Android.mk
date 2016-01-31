@@ -37,7 +37,8 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE = libprofile_rt
 LOCAL_CFLAGS := $(libcompiler_rt_cflags)
-LOCAL_SRC_FILES = $(libprofile_rt_srcs)
+LOCAL_SRC_FILES := $(libprofile_rt_srcs)
+LOCAL_CPP_EXTENSION := .cc
 LOCAL_SANITIZE := never
 LOCAL_MULTILIB := both
 LOCAL_CXX_STL := none
@@ -53,7 +54,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE = libprofile_rt
 LOCAL_CFLAGS := $(libcompiler_rt_cflags)
 LOCAL_CLANG := true
-LOCAL_SRC_FILES = $(libprofile_rt_srcs)
+LOCAL_SRC_FILES := $(libprofile_rt_srcs)
+LOCAL_CPP_EXTENSION := .cc
 LOCAL_SANITIZE := never
 LOCAL_MULTILIB := both
 LOCAL_NDK_STL_VARIANT := none
