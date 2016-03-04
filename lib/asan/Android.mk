@@ -203,7 +203,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libasan_noinst_test
 LOCAL_MODULE_TAGS := tests
 LOCAL_C_INCLUDES := \
-    external/gtest/include \
     external/compiler-rt/include \
     external/compiler-rt/lib \
     external/compiler-rt/lib/asan/tests \
@@ -224,7 +223,7 @@ LOCAL_SANITIZE := never
 LOCAL_MODULE_TARGET_ARCH := arm arm64 x86
 LOCAL_CXX_STL := libc++
 
-include $(BUILD_STATIC_LIBRARY)
+include $(BUILD_STATIC_TEST_LIBRARY)
 
 
 include $(CLEAR_VARS)
@@ -232,21 +231,20 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := asan_test
 LOCAL_MODULE_TAGS := tests
 LOCAL_C_INCLUDES := \
-    external/gtest/include \
     external/compiler-rt/lib \
     external/compiler-rt/lib/asan/tests \
     external/compiler-rt/lib/sanitizer_common/tests
 LOCAL_CFLAGS += $(asan_test_cflags)
 LOCAL_SRC_FILES := $(asan_test_files)
 LOCAL_CPP_EXTENSION := .cc
-LOCAL_STATIC_LIBRARIES := libgtest libasan_noinst_test
+LOCAL_STATIC_LIBRARIES := libasan_noinst_test
 LOCAL_SHARED_LIBRARIES := libc
 LOCAL_SANITIZE := address
 LOCAL_CLANG := true
 LOCAL_MODULE_TARGET_ARCH := arm arm64 x86
 LOCAL_CXX_STL := libc++
 
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)
 
 endif # SKIP_LLVM_TESTS
 
@@ -283,7 +281,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libasan_noinst_test
 LOCAL_MODULE_TAGS := tests
 LOCAL_C_INCLUDES := \
-    external/gtest/include \
     external/compiler-rt/include \
     external/compiler-rt/lib \
     external/compiler-rt/lib/asan/tests \
@@ -302,7 +299,7 @@ LOCAL_CLANG := true
 LOCAL_CXX_STL := libc++
 LOCAL_MULTILIB := both
 LOCAL_SANITIZE := never
-include $(BUILD_HOST_STATIC_LIBRARY)
+include $(BUILD_HOST_STATIC_TEST_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := asan_test
