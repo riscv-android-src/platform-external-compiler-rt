@@ -378,7 +378,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libcompiler_rt
 LOCAL_CFLAGS := $(libcompiler_rt_common_CFLAGS)
 LOCAL_CFLAGS_arm += -D__ARM_EABI__
-LOCAL_CFLAGS_mips64 += -DCRT_HAS_128BIT -DCRT_LDBL_128BIT
+LOCAL_CFLAGS_mips64 += -DCRT_HAS_128BIT
 LOCAL_ASFLAGS := -integrated-as
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := lib/builtins/enable_execute_stack.c
@@ -393,6 +393,13 @@ LOCAL_MODULE_TARGET_ARCH := arm arm64 mips mips64 x86 x86_64
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_SANITIZE := never
 LOCAL_CXX_STL := none
+
+# These don't actually link, but are required to get exported headers
+LOCAL_STATIC_LIBRARIES_arm64 := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_mips := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_mips64 := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_x86 := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_x86_64 := libunwindbacktrace
 
 include $(BUILD_STATIC_LIBRARY)
 
@@ -414,6 +421,10 @@ LOCAL_SANITIZE := never
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MULTILIB := both
 LOCAL_CXX_STL := none
+
+# These don't actually link, but are required to get exported headers
+LOCAL_STATIC_LIBRARIES_linux := libunwindbacktrace
+LOCAL_STATIC_LIBRARIES_windows := libunwindbacktrace
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
