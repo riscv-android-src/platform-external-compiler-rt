@@ -53,9 +53,6 @@ cc_library_static {
     },
 }
 
-// Don't build compiler-rt without clang
-// ANDROIDMK TRANSLATION ERROR: unsupported directive
-// ifneq ($(WITHOUT_TARGET_CLANG), true)
 //=====================================================================
 // Device and Host Static Library: libcompiler_rt
 //=====================================================================
@@ -68,6 +65,7 @@ cc_library {
     // Skip apple_versioning.c since it is unused.
     // Skip atomic.c since it needs to be built separately according to the docs.
     srcs: [
+        "lib/builtins/enable_execute_stack.c",
         "lib/builtins/absvdi2.c",
         "lib/builtins/absvsi2.c",
         "lib/builtins/absvti2.c",
@@ -348,8 +346,6 @@ cc_library {
 
     target: {
         not_windows: {
-            // Only build enable_execute_stack.c on non-Windows hosts.
-            srcs: ["lib/builtins/enable_execute_stack.c"],
             host_ldlibs: [
                 "-lpthread",
                 "-lc",
@@ -357,7 +353,6 @@ cc_library {
             ],
         },
         android: {
-            srcs: ["lib/builtins/enable_execute_stack.c"],
             shared_libs: ["libdl", "liblog"],
             static_libs: ["liblzma"],
         },
@@ -366,29 +361,24 @@ cc_library {
             ldflags: ["-Wl,--exclude-libs,libunwind_llvm.a"],
         },
         android_arm64: {
-            // b/26968262 liblzma needs to be after libunwindbacktrace
-            static_libs: ["libunwindbacktrace","liblzma"],
+            static_libs: ["libunwindbacktrace"],
             ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a"],
         },
         android_mips: {
-            // b/26968262 liblzma needs to be after libunwindbacktrace
-            static_libs: ["libunwindbacktrace","liblzma"],
+            static_libs: ["libunwindbacktrace"],
             ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a"],
         },
         android_mips64: {
-            // b/26968262 liblzma needs to be after libunwindbacktrace
-            static_libs: ["libunwindbacktrace","liblzma"],
+            static_libs: ["libunwindbacktrace"],
             ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a"],
         },
         android_x86: {
-            // b/26968262 liblzma needs to be after libunwindbacktrace
-            static_libs: ["libunwindbacktrace","liblzma"],
+            static_libs: ["libunwindbacktrace"],
             ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a"],
         },
         android_x86_64: {
             srcs: ["lib/builtins/ppc/floatditf.c"],
-            // b/26968262 liblzma needs to be after libunwindbacktrace
-            static_libs: ["libunwindbacktrace","liblzma"],
+            static_libs: ["libunwindbacktrace"],
             ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a"],
         },
         linux: {
@@ -396,6 +386,8 @@ cc_library {
         },
         windows: {
             static_libs: ["libunwindbacktrace"],
+            // Only build enable_execute_stack.c on non-Windows hosts.
+            exclude_srcs: ["lib/builtins/enable_execute_stack.c"],
         },
     },
 
@@ -409,8 +401,30 @@ cc_library {
     stl: "none",
 }
 
-// Build asan, lsan, etc.
-// ANDROIDMK TRANSLATION ERROR: unsupported include
-// include $(call all-makefiles-under,$(LOCAL_PATH)/lib)
-// ANDROIDMK TRANSLATION ERROR: unsupported directive
-// endif
+cc_defaults {
+    name: "asan_arch_defaults",
+
+    enabled: false,
+    target: {
+        android_arm: {
+            enabled: true,
+        },
+        android_arm64: {
+            enabled: true,
+        },
+        android_x86: {
+            enabled: true,
+        },
+        linux: {
+            enabled: true,
+        },
+    },
+}
+
+subdirs=[
+    "lib/asan",
+    //"lib/interception",
+    "lib/sanitizer_common",
+    //"lib/tsan",
+    "lib/ubsan",
+]
