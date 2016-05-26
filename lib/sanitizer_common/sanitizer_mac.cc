@@ -68,22 +68,34 @@ extern "C" {
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <util.h>
+
+// from <crt_externs.h>, but we don't have that file on iOS
+extern "C" {
+  extern char ***_NSGetArgv(void);
+  extern char ***_NSGetEnviron(void);
+}
 
 namespace __sanitizer {
 
 #include "sanitizer_syscall_generic.inc"
 
+// Direct syscalls, don't call libmalloc hooks.
+extern "C" void *__mmap(void *addr, size_t len, int prot, int flags, int fildes,
+                        off_t off);
+extern "C" int __munmap(void *, size_t);
+
 // ---------------------- sanitizer_libc.h
 uptr internal_mmap(void *addr, size_t length, int prot, int flags,
                    int fd, u64 offset) {
   if (fd == -1) fd = VM_MAKE_TAG(VM_MEMORY_ANALYSIS_TOOL);
-  return (uptr)mmap(addr, length, prot, flags, fd, offset);
+  return (uptr)__mmap(addr, length, prot, flags, fd, offset);
 }
 
 uptr internal_munmap(void *addr, uptr length) {
-  return munmap(addr, length);
+  return __munmap(addr, length);
 }
 
 int internal_mprotect(void *addr, uptr length, int prot) {
@@ -197,6 +209,15 @@ uptr internal_rename(const char *oldpath, const char *newpath) {
 
 uptr internal_ftruncate(fd_t fd, uptr size) {
   return ftruncate(fd, size);
+}
+
+uptr internal_execve(const char *filename, char *const argv[],
+                     char *const envp[]) {
+  return execve(filename, argv, envp);
+}
+
+uptr internal_waitpid(int pid, int *status, int options) {
+  return waitpid(pid, status, options);
 }
 
 // ----------------- sanitizer_common.h
@@ -345,13 +366,16 @@ void GetThreadStackAndTls(bool main, uptr *stk_addr, uptr *stk_size,
 #endif
 }
 
-uptr GetListOfModules(LoadedModule *modules, uptr max_modules,
-                      string_predicate_t filter) {
+void ListOfModules::init() {
+  clear();
   MemoryMappingLayout memory_mapping(false);
-  return memory_mapping.DumpListOfModules(modules, max_modules, filter);
+  memory_mapping.DumpListOfModules(&modules_);
 }
 
-bool IsDeadlySignal(int signum) {
+bool IsHandledDeadlySignal(int signum) {
+  if ((SANITIZER_WATCHOS || SANITIZER_TVOS) && !(SANITIZER_IOSSIM))
+    // Handling fatal signals on watchOS and tvOS devices is disallowed.
+    return false;
   return (signum == SIGSEGV || signum == SIGBUS) && common_flags()->handle_segv;
 }
 
@@ -430,6 +454,12 @@ void WriteOneLineToSyslog(const char *s) {
   asl_log(nullptr, nullptr, ASL_LEVEL_ERR, "%s", s);
 }
 
+void LogMessageOnPrintf(const char *str) {
+  // Log all printf output to CrashLog.
+  if (common_flags()->abort_on_error)
+    CRAppendCrashLogMessage(str);
+}
+
 void LogFullErrorReport(const char *buffer) {
   // Log with os_trace. This will make it into the crash log.
 #if SANITIZER_OS_TRACE
@@ -463,9 +493,11 @@ void LogFullErrorReport(const char *buffer) {
   if (common_flags()->log_to_syslog)
     WriteToSyslog(buffer);
 
-  // Log to CrashLog.
-  if (common_flags()->abort_on_error)
-    CRSetCrashLogMessage(buffer);
+  // The report is added to CrashLog as part of logging all of Printf output.
+}
+
+SignalContext::WriteFlag SignalContext::GetWriteFlag(void *context) {
+  return UNKNOWN;  // FIXME: implement this.
 }
 
 void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
@@ -527,10 +559,9 @@ void LeakyResetEnv(const char *name, const char *name_value) {
   }
 }
 
-static bool reexec_disabled = false;
-
-void DisableReexec() {
-  reexec_disabled = true;
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ReexecDisabled() {
+  return false;
 }
 
 extern "C" double dyldVersionNumber;
@@ -546,7 +577,7 @@ bool DyldNeedsEnvVariable() {
 }
 
 void MaybeReexec() {
-  if (reexec_disabled) return;
+  if (ReexecDisabled()) return;
 
   // Make sure the dynamic runtime library is preloaded so that the
   // wrappers work. If it is not, set DYLD_INSERT_LIBRARIES and re-exec
@@ -598,6 +629,21 @@ void MaybeReexec() {
            "possibly because of sandbox restrictions. Make sure to launch the "
            "executable with:\n%s=%s\n", kDyldInsertLibraries, new_env);
     CHECK("execv failed" && 0);
+  }
+
+  // Verify that interceptors really work.  We'll use dlsym to locate
+  // "pthread_create", if interceptors are working, it should really point to
+  // "wrap_pthread_create" within our own dylib.
+  Dl_info info_pthread_create;
+  void *dlopen_addr = dlsym(RTLD_DEFAULT, "pthread_create");
+  CHECK(dladdr(dlopen_addr, &info_pthread_create));
+  if (internal_strcmp(info.dli_fname, info_pthread_create.dli_fname) != 0) {
+    Report(
+        "ERROR: Interceptors are not working. This may be because %s is "
+        "loaded too late (e.g. via dlopen). Please launch the executable "
+        "with:\n%s=%s\n",
+        SanitizerToolName, kDyldInsertLibraries, info.dli_fname);
+    CHECK("interceptors not installed" && 0);
   }
 
   if (!lib_is_in_env)
@@ -660,6 +706,10 @@ void MaybeReexec() {
   // a separate function called after InitializeAllocator().
   if (new_env_pos == new_env + env_name_len + 1) new_env = NULL;
   LeakyResetEnv(kDyldInsertLibraries, new_env);
+}
+
+char **GetArgv() {
+  return *_NSGetArgv();
 }
 
 }  // namespace __sanitizer
