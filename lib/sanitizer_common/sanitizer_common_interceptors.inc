@@ -155,6 +155,14 @@
 #define COMMON_INTERCEPTOR_USER_CALLBACK_END() {}
 #endif
 
+#ifdef SANITIZER_NLDBL_VERSION
+#define COMMON_INTERCEPT_FUNCTION_LDBL(fn)                          \
+    COMMON_INTERCEPT_FUNCTION_VER(fn, SANITIZER_NLDBL_VERSION)
+#else
+#define COMMON_INTERCEPT_FUNCTION_LDBL(fn)                          \
+    COMMON_INTERCEPT_FUNCTION(fn)
+#endif
+
 struct FileMetadata {
   // For open_memstream().
   char **addr;
@@ -206,6 +214,12 @@ UNUSED static void DeleteInterceptorMetadata(void *addr) {
 
 #if SANITIZER_INTERCEPT_STRLEN
 INTERCEPTOR(SIZE_T, strlen, const char *s) {
+  // Sometimes strlen is called prior to InitializeCommonInterceptors,
+  // in which case the REAL(strlen) typically used in
+  // COMMON_INTERCEPTOR_ENTER will fail.  We use internal_strlen here
+  // to handle that.
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return internal_strlen(s);
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, strlen, s);
   SIZE_T result = REAL(strlen)(s);
@@ -395,6 +409,8 @@ INTERCEPTOR(char*, strcasestr, const char *s1, const char *s2) {
 #if SANITIZER_INTERCEPT_STRCHR
 INTERCEPTOR(char*, strchr, const char *s, int c) {
   void *ctx;
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return internal_strchr(s, c);
   COMMON_INTERCEPTOR_ENTER(ctx, strchr, s, c);
   char *result = REAL(strchr)(s, c);
   uptr len = internal_strlen(s);
@@ -426,6 +442,8 @@ INTERCEPTOR(char*, strchrnul, const char *s, int c) {
 #if SANITIZER_INTERCEPT_STRRCHR
 INTERCEPTOR(char*, strrchr, const char *s, int c) {
   void *ctx;
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return internal_strrchr(s, c);
   COMMON_INTERCEPTOR_ENTER(ctx, strrchr, s, c);
   uptr len = internal_strlen(s);
   if (common_flags()->intercept_strchr)
@@ -660,7 +678,7 @@ INTERCEPTOR(long double, frexpl, long double x, int *exp) {
 
 #define INIT_FREXPF_FREXPL           \
   COMMON_INTERCEPT_FUNCTION(frexpf); \
-  COMMON_INTERCEPT_FUNCTION(frexpl)
+  COMMON_INTERCEPT_FUNCTION_LDBL(frexpl)
 #else
 #define INIT_FREXPF_FREXPL
 #endif  // SANITIZER_INTERCEPT_FREXPF_FREXPL
@@ -2439,7 +2457,7 @@ INTERCEPTOR(long double, modfl, long double x, long double *iptr) {
 #define INIT_MODF                   \
   COMMON_INTERCEPT_FUNCTION(modf);  \
   COMMON_INTERCEPT_FUNCTION(modff); \
-  COMMON_INTERCEPT_FUNCTION(modfl);
+  COMMON_INTERCEPT_FUNCTION_LDBL(modfl);
 #else
 #define INIT_MODF
 #endif
@@ -4100,7 +4118,7 @@ INTERCEPTOR(void, sincosl, long double x, long double *sin, long double *cos) {
 #define INIT_SINCOS                   \
   COMMON_INTERCEPT_FUNCTION(sincos);  \
   COMMON_INTERCEPT_FUNCTION(sincosf); \
-  COMMON_INTERCEPT_FUNCTION(sincosl);
+  COMMON_INTERCEPT_FUNCTION_LDBL(sincosl);
 #else
 #define INIT_SINCOS
 #endif
@@ -4139,7 +4157,7 @@ INTERCEPTOR(long double, remquol, long double x, long double y, int *quo) {
 #define INIT_REMQUO                   \
   COMMON_INTERCEPT_FUNCTION(remquo);  \
   COMMON_INTERCEPT_FUNCTION(remquof); \
-  COMMON_INTERCEPT_FUNCTION(remquol);
+  COMMON_INTERCEPT_FUNCTION_LDBL(remquol);
 #else
 #define INIT_REMQUO
 #endif
@@ -4170,7 +4188,7 @@ INTERCEPTOR(long double, lgammal, long double x) {
 #define INIT_LGAMMA                   \
   COMMON_INTERCEPT_FUNCTION(lgamma);  \
   COMMON_INTERCEPT_FUNCTION(lgammaf); \
-  COMMON_INTERCEPT_FUNCTION(lgammal);
+  COMMON_INTERCEPT_FUNCTION_LDBL(lgammal);
 #else
 #define INIT_LGAMMA
 #endif
@@ -4214,7 +4232,7 @@ INTERCEPTOR(long double, lgammal_r, long double x, int *signp) {
   if (signp) COMMON_INTERCEPTOR_WRITE_RANGE(ctx, signp, sizeof(*signp));
   return res;
 }
-#define INIT_LGAMMAL_R COMMON_INTERCEPT_FUNCTION(lgammal_r);
+#define INIT_LGAMMAL_R COMMON_INTERCEPT_FUNCTION_LDBL(lgammal_r);
 #else
 #define INIT_LGAMMAL_R
 #endif
@@ -5480,7 +5498,7 @@ INTERCEPTOR(SSIZE_T, recv, int fd, void *buf, SIZE_T len, int flags) {
   COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd);
   SSIZE_T res = REAL(recv)(fd, buf, len, flags);
   if (res > 0) {
-    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, res);
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, Min((SIZE_T)res, len));
   }
   if (res >= 0 && fd >= 0) COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd);
   return res;
@@ -5497,7 +5515,7 @@ INTERCEPTOR(SSIZE_T, recvfrom, int fd, void *buf, SIZE_T len, int flags,
   (void)srcaddr_sz;  // prevent "set but not used" warning
   SSIZE_T res = REAL(recvfrom)(fd, buf, len, flags, srcaddr, addrlen);
   if (res > 0) {
-    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, res);
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, Min((SIZE_T)res, len));
     if (srcaddr)
       COMMON_INTERCEPTOR_INITIALIZE_RANGE(srcaddr,
                                           Min((SIZE_T)*addrlen, srcaddr_sz));
@@ -5510,6 +5528,88 @@ INTERCEPTOR(SSIZE_T, recvfrom, int fd, void *buf, SIZE_T len, int flags,
 #else
 #define INIT_RECV_RECVFROM
 #endif
+
+#if SANITIZER_INTERCEPT_STAT
+INTERCEPTOR(int, stat, const char *path, void *buf) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, stat, path, buf);
+  if (common_flags()->intercept_stat)
+    COMMON_INTERCEPTOR_READ_STRING(ctx, path, 0);
+  int res = REAL(stat)(path, buf);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, __sanitizer::struct_stat_sz);
+  return res;
+}
+#define INIT_STAT COMMON_INTERCEPT_FUNCTION(stat)
+#else
+#define INIT_STAT
+#endif
+
+#if SANITIZER_INTERCEPT___XSTAT
+INTERCEPTOR(int, __xstat, int version, const char *path, void *buf) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, __xstat, version, path, buf);
+  if (common_flags()->intercept_stat)
+    COMMON_INTERCEPTOR_READ_STRING(ctx, path, 0);
+  int res = REAL(__xstat)(version, path, buf);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, __sanitizer::struct_stat_sz);
+  return res;
+}
+#define INIT___XSTAT COMMON_INTERCEPT_FUNCTION(__xstat)
+#else
+#define INIT___XSTAT
+#endif
+
+#if SANITIZER_INTERCEPT___XSTAT64
+INTERCEPTOR(int, __xstat64, int version, const char *path, void *buf) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, __xstat64, version, path, buf);
+  if (common_flags()->intercept_stat)
+    COMMON_INTERCEPTOR_READ_STRING(ctx, path, 0);
+  int res = REAL(__xstat64)(version, path, buf);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, __sanitizer::struct_stat64_sz);
+  return res;
+}
+#define INIT___XSTAT64 COMMON_INTERCEPT_FUNCTION(__xstat64)
+#else
+#define INIT___XSTAT64
+#endif
+
+#if SANITIZER_INTERCEPT___LXSTAT
+INTERCEPTOR(int, __lxstat, int version, const char *path, void *buf) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, __lxstat, version, path, buf);
+  if (common_flags()->intercept_stat)
+    COMMON_INTERCEPTOR_READ_STRING(ctx, path, 0);
+  int res = REAL(__lxstat)(version, path, buf);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, __sanitizer::struct_stat_sz);
+  return res;
+}
+#define INIT___LXSTAT COMMON_INTERCEPT_FUNCTION(__lxstat)
+#else
+#define INIT___LXSTAT
+#endif
+
+#if SANITIZER_INTERCEPT___LXSTAT64
+INTERCEPTOR(int, __lxstat64, int version, const char *path, void *buf) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, __lxstat64, version, path, buf);
+  if (common_flags()->intercept_stat)
+    COMMON_INTERCEPTOR_READ_STRING(ctx, path, 0);
+  int res = REAL(__lxstat64)(version, path, buf);
+  if (!res)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, buf, __sanitizer::struct_stat64_sz);
+  return res;
+}
+#define INIT___LXSTAT64 COMMON_INTERCEPT_FUNCTION(__lxstat64)
+#else
+#define INIT___LXSTAT64
+#endif
+
+// FIXME: add other *stat interceptor
 
 static void InitializeCommonInterceptors() {
   static u64 metadata_mem[sizeof(MetadataHashMap) / sizeof(u64) + 1];
@@ -5696,4 +5796,10 @@ static void InitializeCommonInterceptors() {
   INIT_CTERMID;
   INIT_CTERMID_R;
   INIT_RECV_RECVFROM;
+  INIT_STAT;
+  INIT___XSTAT;
+  INIT___XSTAT64;
+  INIT___LXSTAT;
+  INIT___LXSTAT64;
+  // FIXME: add other *stat interceptors.
 }

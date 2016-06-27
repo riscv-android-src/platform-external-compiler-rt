@@ -86,11 +86,9 @@ struct ucontext_t {
 };
 #endif
 
-#if defined(__x86_64__) || defined(__mips__) \
-  || (defined(__powerpc64__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#if defined(__x86_64__) || defined(__mips__) || SANITIZER_PPC64V1
 #define PTHREAD_ABI_BASE  "GLIBC_2.3.2"
-#elif defined(__aarch64__) || (defined(__powerpc64__) \
-  && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#elif defined(__aarch64__) || SANITIZER_PPC64V2
 #define PTHREAD_ABI_BASE  "GLIBC_2.17"
 #endif
 
@@ -713,7 +711,11 @@ TSAN_INTERCEPTOR(void *, mmap, void *addr, SIZE_T sz, int prot, int flags,
   if (res != MAP_FAILED) {
     if (fd > 0)
       FdAccess(thr, pc, fd);
-    MemoryRangeImitateWrite(thr, pc, (uptr)res, sz);
+
+    if (thr->ignore_reads_and_writes == 0)
+      MemoryRangeImitateWrite(thr, pc, (uptr)res, sz);
+    else
+      MemoryResetRange(thr, pc, (uptr)res, sz);
   }
   return res;
 }
@@ -728,7 +730,11 @@ TSAN_INTERCEPTOR(void *, mmap64, void *addr, SIZE_T sz, int prot, int flags,
   if (res != MAP_FAILED) {
     if (fd > 0)
       FdAccess(thr, pc, fd);
-    MemoryRangeImitateWrite(thr, pc, (uptr)res, sz);
+
+    if (thr->ignore_reads_and_writes == 0)
+      MemoryRangeImitateWrite(thr, pc, (uptr)res, sz);
+    else
+      MemoryResetRange(thr, pc, (uptr)res, sz);
   }
   return res;
 }
@@ -742,7 +748,8 @@ TSAN_INTERCEPTOR(int, munmap, void *addr, long_t sz) {
   if (sz != 0) {
     // If sz == 0, munmap will return EINVAL and don't unmap any memory.
     DontNeedShadowFor((uptr)addr, sz);
-    ctx->metamap.ResetRange(thr, pc, (uptr)addr, (uptr)sz);
+    ScopedGlobalProcessor sgp;
+    ctx->metamap.ResetRange(thr->proc(), (uptr)addr, (uptr)sz);
   }
   int res = REAL(munmap)(addr, sz);
   return res;
@@ -837,7 +844,10 @@ STDCXX_INTERCEPTOR(void, __cxa_guard_abort, atomic_uint32_t *g) {
 namespace __tsan {
 void DestroyThreadState() {
   ThreadState *thr = cur_thread();
+  Processor *proc = thr->proc();
   ThreadFinish(thr);
+  ProcUnwire(proc, thr);
+  ProcDestroy(proc);
   ThreadSignalContext *sctx = thr->signal_ctx;
   if (sctx) {
     thr->signal_ctx = 0;
@@ -888,6 +898,8 @@ extern "C" void *__tsan_thread_start_func(void *arg) {
 #endif
     while ((tid = atomic_load(&p->tid, memory_order_acquire)) == 0)
       internal_sched_yield();
+    Processor *proc = ProcCreate();
+    ProcWire(proc, thr);
     ThreadStart(thr, tid, GetTid());
     atomic_store(&p->tid, 0, memory_order_release);
   }
@@ -1347,96 +1359,6 @@ TSAN_INTERCEPTOR(int, pthread_once, void *o, void (*f)()) {
 }
 
 #if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, __xstat, int version, const char *path, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__xstat, version, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__xstat)(version, path, buf);
-}
-#define TSAN_MAYBE_INTERCEPT___XSTAT TSAN_INTERCEPT(__xstat)
-#else
-#define TSAN_MAYBE_INTERCEPT___XSTAT
-#endif
-
-TSAN_INTERCEPTOR(int, stat, const char *path, void *buf) {
-#if SANITIZER_FREEBSD || SANITIZER_MAC || SANITIZER_ANDROID
-  SCOPED_TSAN_INTERCEPTOR(stat, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(stat)(path, buf);
-#else
-  SCOPED_TSAN_INTERCEPTOR(__xstat, 0, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__xstat)(0, path, buf);
-#endif
-}
-
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, __xstat64, int version, const char *path, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__xstat64, version, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__xstat64)(version, path, buf);
-}
-#define TSAN_MAYBE_INTERCEPT___XSTAT64 TSAN_INTERCEPT(__xstat64)
-#else
-#define TSAN_MAYBE_INTERCEPT___XSTAT64
-#endif
-
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, stat64, const char *path, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__xstat64, 0, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__xstat64)(0, path, buf);
-}
-#define TSAN_MAYBE_INTERCEPT_STAT64 TSAN_INTERCEPT(stat64)
-#else
-#define TSAN_MAYBE_INTERCEPT_STAT64
-#endif
-
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, __lxstat, int version, const char *path, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__lxstat, version, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__lxstat)(version, path, buf);
-}
-#define TSAN_MAYBE_INTERCEPT___LXSTAT TSAN_INTERCEPT(__lxstat)
-#else
-#define TSAN_MAYBE_INTERCEPT___LXSTAT
-#endif
-
-TSAN_INTERCEPTOR(int, lstat, const char *path, void *buf) {
-#if SANITIZER_FREEBSD || SANITIZER_MAC || SANITIZER_ANDROID
-  SCOPED_TSAN_INTERCEPTOR(lstat, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(lstat)(path, buf);
-#else
-  SCOPED_TSAN_INTERCEPTOR(__lxstat, 0, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__lxstat)(0, path, buf);
-#endif
-}
-
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, __lxstat64, int version, const char *path, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__lxstat64, version, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__lxstat64)(version, path, buf);
-}
-#define TSAN_MAYBE_INTERCEPT___LXSTAT64 TSAN_INTERCEPT(__lxstat64)
-#else
-#define TSAN_MAYBE_INTERCEPT___LXSTAT64
-#endif
-
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, lstat64, const char *path, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__lxstat64, 0, path, buf);
-  READ_STRING(thr, pc, path, 0);
-  return REAL(__lxstat64)(0, path, buf);
-}
-#define TSAN_MAYBE_INTERCEPT_LSTAT64 TSAN_INTERCEPT(lstat64)
-#else
-#define TSAN_MAYBE_INTERCEPT_LSTAT64
-#endif
-
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
 TSAN_INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
   SCOPED_TSAN_INTERCEPTOR(__fxstat, version, fd, buf);
   if (fd > 0)
@@ -1887,6 +1809,7 @@ static void CallUserSignalHandler(ThreadState *thr, bool sync, bool acquire,
   int ignore_sync = thr->ignore_sync;
   if (!ctx->after_multithreaded_fork) {
     thr->ignore_reads_and_writes = 0;
+    thr->fast_state.ClearIgnoreBit();
     thr->ignore_interceptors = 0;
     thr->ignore_sync = 0;
   }
@@ -1907,6 +1830,8 @@ static void CallUserSignalHandler(ThreadState *thr, bool sync, bool acquire,
   }
   if (!ctx->after_multithreaded_fork) {
     thr->ignore_reads_and_writes = ignore_reads_and_writes;
+    if (ignore_reads_and_writes)
+      thr->fast_state.SetIgnoreBit();
     thr->ignore_interceptors = ignore_interceptors;
     thr->ignore_sync = ignore_sync;
   }
@@ -2275,6 +2200,8 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
 #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
 
 #define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
+#define COMMON_INTERCEPT_FUNCTION_VER(name, ver)                          \
+  INTERCEPT_FUNCTION_VER(name, ver)
 
 #define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size)                    \
   MemoryAccessRange(((TsanInterceptorContext *)ctx)->thr,                 \
@@ -2609,14 +2536,6 @@ void InitializeInterceptors() {
 
   TSAN_INTERCEPT(pthread_once);
 
-  TSAN_INTERCEPT(stat);
-  TSAN_MAYBE_INTERCEPT___XSTAT;
-  TSAN_MAYBE_INTERCEPT_STAT64;
-  TSAN_MAYBE_INTERCEPT___XSTAT64;
-  TSAN_INTERCEPT(lstat);
-  TSAN_MAYBE_INTERCEPT___LXSTAT;
-  TSAN_MAYBE_INTERCEPT_LSTAT64;
-  TSAN_MAYBE_INTERCEPT___LXSTAT64;
   TSAN_INTERCEPT(fstat);
   TSAN_MAYBE_INTERCEPT___FXSTAT;
   TSAN_MAYBE_INTERCEPT_FSTAT64;

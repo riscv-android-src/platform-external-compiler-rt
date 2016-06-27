@@ -15,16 +15,7 @@ else()
   set(COMPILER_RT_STANDALONE_BUILD FALSE)
 endif()
 
-# The CompilerRT build system requires CMake version 2.8.8 or higher in order
-# to use its support for building convenience "libraries" as a collection of
-# .o files. This is particularly useful in producing larger, more complex
-# runtime libraries.
-if (NOT MSVC)
-  cmake_minimum_required(VERSION 2.8.8)
-else()
-  # Version 2.8.12.1 is required to build with Visual Studio 2013.
-  cmake_minimum_required(VERSION 2.8.12.1)
-endif()
+cmake_minimum_required(VERSION 3.4.3)
 
 # FIXME: It may be removed when we use 2.8.12.
 if(CMAKE_VERSION VERSION_LESS 2.8.12)
@@ -46,51 +37,20 @@ else()
   endif()
 endif()
 
-# Top level target used to build all compiler-rt libraries.
-add_custom_target(compiler-rt ALL)
+# Add path for custom compiler-rt modules.
+list(INSERT CMAKE_MODULE_PATH 0
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
+  )
+
+include(base-config-ix)
 
 option(COMPILER_RT_BUILD_BUILTINS "Build builtins" ON)
 mark_as_advanced(COMPILER_RT_BUILD_BUILTINS)
 option(COMPILER_RT_BUILD_SANITIZERS "Build sanitizers" ON)
 mark_as_advanced(COMPILER_RT_BUILD_SANITIZERS)
 
-if (NOT COMPILER_RT_STANDALONE_BUILD)
-  # Compute the Clang version from the LLVM version.
-  # FIXME: We should be able to reuse CLANG_VERSION variable calculated
-  #        in Clang cmake files, instead of copying the rules here.
-  string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION
-         ${PACKAGE_VERSION})
-  # Setup the paths where compiler-rt runtimes and headers should be stored.
-  set(COMPILER_RT_OUTPUT_DIR ${LLVM_LIBRARY_OUTPUT_INTDIR}/clang/${CLANG_VERSION})
-  set(COMPILER_RT_EXEC_OUTPUT_DIR ${LLVM_RUNTIME_OUTPUT_INTDIR})
-  set(COMPILER_RT_INSTALL_PATH lib${LLVM_LIBDIR_SUFFIX}/clang/${CLANG_VERSION})
-  option(COMPILER_RT_INCLUDE_TESTS "Generate and build compiler-rt unit tests."
-         ${LLVM_INCLUDE_TESTS})
- option(COMPILER_RT_ENABLE_WERROR "Fail and stop if warning is triggered"
-        ${LLVM_ENABLE_WERROR})
-  # Use just-built Clang to compile/link tests on all platforms, except for
-  # Windows where we need to use clang-cl instead.
-  if(NOT MSVC)
-    set(COMPILER_RT_TEST_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang)
-    set(COMPILER_RT_TEST_CXX_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++)
-  else()
-    set(COMPILER_RT_TEST_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang.exe)
-    set(COMPILER_RT_TEST_CXX_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++.exe)
-  endif()
-else()
-  # Take output dir and install path from the user.
-  set(COMPILER_RT_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE PATH
-    "Path where built compiler-rt libraries should be stored.")
-  set(COMPILER_RT_EXEC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin CACHE PATH
-    "Path where built compiler-rt executables should be stored.")
-  set(COMPILER_RT_INSTALL_PATH ${CMAKE_INSTALL_PREFIX} CACHE PATH
-    "Path where built compiler-rt libraries should be installed.")
-  option(COMPILER_RT_INCLUDE_TESTS "Generate and build compiler-rt unit tests." OFF)
-  option(COMPILER_RT_ENABLE_WERROR "Fail and stop if warning is triggered" OFF)
-  # Use a host compiler to compile/link tests.
-  set(COMPILER_RT_TEST_COMPILER ${CMAKE_C_COMPILER} CACHE PATH "Compiler to use for testing")
-  set(COMPILER_RT_TEST_CXX_COMPILER ${CMAKE_CXX_COMPILER} CACHE PATH "C++ Compiler to use for testing")
-
+if (COMPILER_RT_STANDALONE_BUILD)
   if (NOT LLVM_CONFIG_PATH)
     find_program(LLVM_CONFIG_PATH "llvm-config"
                  DOC "Path to llvm-config binary")
@@ -138,14 +98,6 @@ else()
   set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
 endif()
 
-if("${COMPILER_RT_TEST_COMPILER}" MATCHES "clang[+]*$")
-  set(COMPILER_RT_TEST_COMPILER_ID Clang)
-elseif("${COMPILER_RT_TEST_COMPILER}" MATCHES "clang.*.exe$")
-  set(COMPILER_RT_TEST_COMPILER_ID Clang)
-else()
-  set(COMPILER_RT_TEST_COMPILER_ID GNU)
-endif()
-
 set(COMPILER_RT_DEFAULT_TARGET_TRIPLE ${TARGET_TRIPLE} CACHE STRING
     "Default triple for which compiler-rt runtimes will be built.")
 if(DEFINED COMPILER_RT_TEST_TARGET_TRIPLE)
@@ -165,23 +117,6 @@ if(NOT COMPILER_RT_DEFAULT_TARGET_TRIPLE STREQUAL TARGET_TRIPLE)
 else()
   set(COMPILER_RT_HAS_EXPLICIT_DEFAULT_TARGET_TRIPLE FALSE)
 endif()
-
-if ("${COMPILER_RT_DEFAULT_TARGET_ABI}" STREQUAL "androideabi")
-  set(ANDROID 1)
-endif()
-
-string(TOLOWER ${CMAKE_SYSTEM_NAME} COMPILER_RT_OS_DIR)
-set(COMPILER_RT_LIBRARY_OUTPUT_DIR
-  ${COMPILER_RT_OUTPUT_DIR}/lib/${COMPILER_RT_OS_DIR})
-set(COMPILER_RT_LIBRARY_INSTALL_DIR
-  ${COMPILER_RT_INSTALL_PATH}/lib/${COMPILER_RT_OS_DIR})
-
-# Add path for custom compiler-rt modules.
-set(CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
-  ${CMAKE_MODULE_PATH}
-  )
 include(CompilerRTUtils)
 
 set(COMPILER_RT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -206,8 +141,6 @@ pythonize_bool(COMPILER_RT_DEBUG)
 #================================
 # Setup Compiler Flags
 #================================
-include(CheckIncludeFile)
-check_include_file(unwind.h HAVE_UNWIND_H)
 
 include(config-ix)
 
@@ -232,7 +165,9 @@ endif()
 append_list_if(COMPILER_RT_HAS_FPIC_FLAG -fPIC SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_FNO_BUILTIN_FLAG -fno-builtin SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_FNO_EXCEPTIONS_FLAG -fno-exceptions SANITIZER_COMMON_CFLAGS)
-append_list_if(COMPILER_RT_HAS_FOMIT_FRAME_POINTER_FLAG -fomit-frame-pointer SANITIZER_COMMON_CFLAGS)
+if(NOT COMPILER_RT_DEBUG)
+  append_list_if(COMPILER_RT_HAS_FOMIT_FRAME_POINTER_FLAG -fomit-frame-pointer SANITIZER_COMMON_CFLAGS)
+endif()
 append_list_if(COMPILER_RT_HAS_FUNWIND_TABLES_FLAG -funwind-tables SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_FNO_STACK_PROTECTOR_FLAG -fno-stack-protector SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_FNO_SANITIZE_SAFE_STACK_FLAG -fno-sanitize=safe-stack SANITIZER_COMMON_CFLAGS)
