@@ -75,11 +75,11 @@ cc_library_static {
         },
         host: {
             srcs: asan_rtl_files,
-            whole_static_libs: ["libubsan"],
-            static_libs: [
+            whole_static_libs: [
+                "libubsan",
                 "libinterception",
                 "liblsan",
-                "libsan",
+                "libsan"
             ],
         },
     },

@@ -14,6 +14,7 @@ SRCS="
 	../rtl/tsan_rtl_mutex.cc
 	../rtl/tsan_rtl_report.cc
 	../rtl/tsan_rtl_thread.cc
+	../rtl/tsan_rtl_proc.cc
 	../rtl/tsan_stack_trace.cc
 	../rtl/tsan_stat.cc
 	../rtl/tsan_suppressions.cc
@@ -32,6 +33,7 @@ SRCS="
 	../../sanitizer_common/sanitizer_stackdepot.cc
 	../../sanitizer_common/sanitizer_stacktrace.cc
 	../../sanitizer_common/sanitizer_symbolizer.cc
+	../../sanitizer_common/sanitizer_termination.cc
 "
 
 if [ "`uname -a | grep Linux`" != "" ]; then
@@ -123,7 +125,7 @@ if [ "$SILENT" != "1" ]; then
 fi
 $CC $DIR/gotsan.cc -c -o $DIR/race_$SUFFIX.syso $FLAGS $CFLAGS
 
-$CC $OSCFLAGS test.c $DIR/race_$SUFFIX.syso -m64 -o $DIR/test $OSLDFLAGS
+$CC $OSCFLAGS test.c $DIR/race_$SUFFIX.syso -m64 -g -o $DIR/test $OSLDFLAGS
 
 export GORACE="exitcode=0 atexit_sleep_ms=0"
 if [ "$SILENT" != "1" ]; then
