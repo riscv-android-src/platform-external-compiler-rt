@@ -28,6 +28,7 @@ cc_library_static {
     cppflags: [
         "-fvisibility=hidden",
         "-fno-exceptions",
+        "-fno-rtti",
         "-std=c++11",
         "-Wall",
         "-Werror",
