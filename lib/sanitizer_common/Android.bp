@@ -29,6 +29,7 @@ cc_library_static {
         "-fvisibility=hidden",
         "-fno-exceptions",
         "-fno-rtti",
+        "-fno-builtin",
         "-std=c++11",
         "-Wall",
         "-Werror",
