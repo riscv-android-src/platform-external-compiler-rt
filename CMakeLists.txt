@@ -16,26 +16,16 @@ else()
 endif()
 
 cmake_minimum_required(VERSION 3.4.3)
-
-# FIXME: It may be removed when we use 2.8.12.
-if(CMAKE_VERSION VERSION_LESS 2.8.12)
-  # Invalidate a couple of keywords.
-  set(cmake_2_8_12_INTERFACE)
-  set(cmake_2_8_12_PRIVATE)
-  if(APPLE)
-    set(CMAKE_MACOSX_RPATH On)
-  endif()
-else()
-  # Use ${cmake_2_8_12_KEYWORD} intead of KEYWORD in target_link_libraries().
-  set(cmake_2_8_12_INTERFACE INTERFACE)
-  set(cmake_2_8_12_PRIVATE PRIVATE)
-  if(POLICY CMP0022)
-    cmake_policy(SET CMP0022 NEW) # automatic when 2.8.12 is required
-  endif()
-  if(POLICY CMP0042)
-    cmake_policy(SET CMP0042 NEW) # automatic when 2.8.12 is required
-  endif()
-endif()
+# FIXME:
+# The OLD behavior (pre 3.2) for this policy is to not set the value of the 
+# CMAKE_EXE_LINKER_FLAGS variable in the generated test project. The NEW behavior
+# for this policy is to set the value of the CMAKE_EXE_LINKER_FLAGS variable 
+# in the test project to the same as it is in the calling project. The new 
+# behavior cause the compiler_rt test to fail during try_compile: see
+# projects/compiler-rt/cmake/Modules/CompilerRTUtils.cmake:121 such that
+# CAN_TARGET_${arch} is not set properly. This results in COMPILER_RT_SUPPORTED_ARCH
+# not being updated properly leading to poblems.
+cmake_policy(SET CMP0056 OLD)
 
 # Add path for custom compiler-rt modules.
 list(INSERT CMAKE_MODULE_PATH 0
@@ -145,7 +135,14 @@ pythonize_bool(COMPILER_RT_DEBUG)
 include(config-ix)
 
 if(MSVC)
-  append_string_if(COMPILER_RT_HAS_W3_FLAG /W3 CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+  # Override any existing /W flags with /W4. This is what LLVM does.  Failing to
+  # remove other /W[0-4] flags will result in a warning about overriding a
+  # previous flag.
+  if (COMPILER_RT_HAS_W4_FLAG)
+    string(REGEX REPLACE " /W[0-4]" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+    string(REGEX REPLACE " /W[0-4]" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    append_string_if(COMPILER_RT_HAS_W4_FLAG /W4 CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+  endif()
 else()
   append_string_if(COMPILER_RT_HAS_WALL_FLAG -Wall CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
 endif()
@@ -240,6 +237,9 @@ append_list_if(COMPILER_RT_HAS_WD4291_FLAG /wd4291 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4391_FLAG /wd4391 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4722_FLAG /wd4722 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4800_FLAG /wd4800 SANITIZER_COMMON_CFLAGS)
+
+# Warnings to turn off for all libraries, not just sanitizers.
+append_string_if(COMPILER_RT_HAS_WUNUSED_PARAMETER_FLAG -Wno-unused-parameter CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
 
 if(APPLE AND SANITIZER_MIN_OSX_VERSION VERSION_LESS "10.9")
   # Mac OS X prior to 10.9 had problems with exporting symbols from
