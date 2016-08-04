@@ -42,6 +42,13 @@ cc_library_static {
     exclude_srcs: [
         "sanitizer_common_nolibc.cc",
     ],
+    arch: {
+        x86_64: {
+            srcs: [
+                "sanitizer_linux_x86_64.S",
+            ]
+        }
+    },
     stl: "none",
     sanitize: {
         never: true,
