@@ -133,6 +133,7 @@ cc_defaults {
         "external/compiler-rt/include",
     ],
     cflags: asan_rtl_cflags,
+    ldflags: ["-Wl,-z,global"],
     srcs: asan_rtl_files + asan_rtl_cxx_files,
     static_libs: [
         "libinterception",
