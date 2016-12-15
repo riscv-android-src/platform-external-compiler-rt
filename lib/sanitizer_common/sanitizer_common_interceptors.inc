@@ -304,8 +304,8 @@ INTERCEPTOR(int, strncmp, const char *s1, const char *s2, uptr size) {
     c2 = (unsigned char)s2[i];
     if (c1 != c2 || c1 == '\0') break;
   }
-  COMMON_INTERCEPTOR_READ_RANGE(ctx, s1, Min(i + 1, size));
-  COMMON_INTERCEPTOR_READ_RANGE(ctx, s2, Min(i + 1, size));
+  COMMON_INTERCEPTOR_READ_STRING(ctx, s1, Min(i + 1, size));
+  COMMON_INTERCEPTOR_READ_STRING(ctx, s2, Min(i + 1, size));
   int result = CharCmpX(c1, c2);
   CALL_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strncmp, GET_CALLER_PC(), s1,
                              s2, size, result);
@@ -326,6 +326,9 @@ static inline int CharCaseCmp(unsigned char c1, unsigned char c2) {
   return c1_low - c2_low;
 }
 
+DECLARE_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strcasecmp, uptr called_pc,
+                              const char *s1, const char *s2, int result)
+
 INTERCEPTOR(int, strcasecmp, const char *s1, const char *s2) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, strcasecmp, s1, s2);
@@ -338,8 +341,15 @@ INTERCEPTOR(int, strcasecmp, const char *s1, const char *s2) {
   }
   COMMON_INTERCEPTOR_READ_STRING(ctx, s1, i + 1);
   COMMON_INTERCEPTOR_READ_STRING(ctx, s2, i + 1);
-  return CharCaseCmp(c1, c2);
+  int result = CharCaseCmp(c1, c2);
+  CALL_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strcasecmp, GET_CALLER_PC(),
+                             s1, s2, result);
+  return result;
 }
+
+DECLARE_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strncasecmp, uptr called_pc,
+                              const char *s1, const char *s2, uptr n,
+                              int result)
 
 INTERCEPTOR(int, strncasecmp, const char *s1, const char *s2, SIZE_T n) {
   void *ctx;
@@ -353,7 +363,10 @@ INTERCEPTOR(int, strncasecmp, const char *s1, const char *s2, SIZE_T n) {
   }
   COMMON_INTERCEPTOR_READ_RANGE(ctx, s1, Min(i + 1, n));
   COMMON_INTERCEPTOR_READ_RANGE(ctx, s2, Min(i + 1, n));
-  return CharCaseCmp(c1, c2);
+  int result = CharCaseCmp(c1, c2);
+  CALL_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strncasecmp, GET_CALLER_PC(),
+                             s1, s2, n, result);
+  return result;
 }
 
 #define INIT_STRCASECMP COMMON_INTERCEPT_FUNCTION(strcasecmp)
@@ -375,6 +388,10 @@ static inline void StrstrCheck(void *ctx, char *r, const char *s1,
 #endif
 
 #if SANITIZER_INTERCEPT_STRSTR
+
+DECLARE_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strstr, uptr called_pc,
+                              const char *s1, const char *s2, char *result)
+
 INTERCEPTOR(char*, strstr, const char *s1, const char *s2) {
   if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
     return internal_strstr(s1, s2);
@@ -383,6 +400,8 @@ INTERCEPTOR(char*, strstr, const char *s1, const char *s2) {
   char *r = REAL(strstr)(s1, s2);
   if (common_flags()->intercept_strstr)
     StrstrCheck(ctx, r, s1, s2);
+  CALL_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strstr, GET_CALLER_PC(), s1,
+                             s2, r);
   return r;
 }
 
@@ -392,12 +411,18 @@ INTERCEPTOR(char*, strstr, const char *s1, const char *s2) {
 #endif
 
 #if SANITIZER_INTERCEPT_STRCASESTR
+
+DECLARE_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strcasestr, uptr called_pc,
+                              const char *s1, const char *s2, char *result)
+
 INTERCEPTOR(char*, strcasestr, const char *s1, const char *s2) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, strcasestr, s1, s2);
   char *r = REAL(strcasestr)(s1, s2);
   if (common_flags()->intercept_strstr)
     StrstrCheck(ctx, r, s1, s2);
+  CALL_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_strcasestr, GET_CALLER_PC(),
+                             s1, s2, r);
   return r;
 }
 
@@ -405,6 +430,30 @@ INTERCEPTOR(char*, strcasestr, const char *s1, const char *s2) {
 #else
 #define INIT_STRCASESTR
 #endif
+
+#if SANITIZER_INTERCEPT_MEMMEM
+DECLARE_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_memmem, uptr called_pc,
+                              const void *s1, SIZE_T len1, const void *s2,
+                              SIZE_T len2, void *result)
+
+INTERCEPTOR(void*, memmem, const void *s1, SIZE_T len1, const void *s2,
+            SIZE_T len2) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, memmem, s1, len1, s2, len2);
+  void *r = REAL(memmem)(s1, len1, s2, len2);
+  if (common_flags()->intercept_memmem) {
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, s1, len1);
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, s2, len2);
+  }
+  CALL_WEAK_INTERCEPTOR_HOOK(__sanitizer_weak_hook_memmem, GET_CALLER_PC(),
+                             s1, len1, s2, len2, r);
+  return r;
+}
+
+#define INIT_MEMMEM COMMON_INTERCEPT_FUNCTION(memmem);
+#else
+#define INIT_MEMMEM
+#endif  // SANITIZER_INTERCEPT_MEMMEM
 
 #if SANITIZER_INTERCEPT_STRCHR
 INTERCEPTOR(char*, strchr, const char *s, int c) {
@@ -614,7 +663,16 @@ INTERCEPTOR(void*, memchr, const void *s, int c, SIZE_T n) {
     return internal_memchr(s, c, n);
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, memchr, s, c, n);
+#if SANITIZER_WINDOWS
+  void *res;
+  if (REAL(memchr)) {
+    res = REAL(memchr)(s, c, n);
+  } else {
+    res = internal_memchr(s, c, n);
+  }
+#else
   void *res = REAL(memchr)(s, c, n);
+#endif
   uptr len = res ? (char *)res - (const char *)s + 1 : n;
   COMMON_INTERCEPTOR_READ_RANGE(ctx, s, len);
   return res;
@@ -4125,6 +4183,20 @@ INTERCEPTOR(char *, tmpnam_r, char *s) {
 #define INIT_TMPNAM_R
 #endif
 
+#if SANITIZER_INTERCEPT_TTYNAME_R
+INTERCEPTOR(int, ttyname_r, int fd, char *name, SIZE_T namesize) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, ttyname_r, fd, name, namesize);
+  int res = REAL(ttyname_r)(fd, name, namesize);
+  if (res == 0)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, name, REAL(strlen)(name) + 1);
+  return res;
+}
+#define INIT_TTYNAME_R COMMON_INTERCEPT_FUNCTION(ttyname_r);
+#else
+#define INIT_TTYNAME_R
+#endif
+
 #if SANITIZER_INTERCEPT_TEMPNAM
 INTERCEPTOR(char *, tempnam, char *dir, char *pfx) {
   void *ctx;
@@ -5830,6 +5902,7 @@ static void InitializeCommonInterceptors() {
   INIT_MEMCHR;
   INIT_MEMCMP;
   INIT_MEMRCHR;
+  INIT_MEMMEM;
   INIT_READ;
   INIT_PREAD;
   INIT_PREAD64;
@@ -5949,6 +6022,7 @@ static void InitializeCommonInterceptors() {
   INIT_PTHREAD_BARRIERATTR_GETPSHARED;
   INIT_TMPNAM;
   INIT_TMPNAM_R;
+  INIT_TTYNAME_R;
   INIT_TEMPNAM;
   INIT_PTHREAD_SETNAME_NP;
   INIT_SINCOS;

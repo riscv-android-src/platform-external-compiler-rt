@@ -37,7 +37,13 @@ int __asan_should_detect_stack_use_after_return() {
   return __asan_option_detect_stack_use_after_return;
 }
 
-// -------------------- A workaround for the abscence of weak symbols ----- {{{
+SANITIZER_INTERFACE_ATTRIBUTE
+uptr __asan_get_shadow_memory_dynamic_address() {
+  __asan_init();
+  return __asan_shadow_memory_dynamic_address;
+}
+
+// -------------------- A workaround for the absence of weak symbols ----- {{{
 // We don't have a direct equivalent of weak symbols when using MSVC, but we can
 // use the /alternatename directive to tell the linker to default a specific
 // symbol to a specific value, which works nicely for allocator hooks and
@@ -64,16 +70,32 @@ void __asan_default_on_error() {}
 // }}}
 }  // extern "C"
 
-// ---------------------- Windows-specific inteceptors ---------------- {{{
+// ---------------------- Windows-specific interceptors ---------------- {{{
+INTERCEPTOR_WINAPI(void, RtlRaiseException, EXCEPTION_RECORD *ExceptionRecord) {
+  CHECK(REAL(RtlRaiseException));
+  // This is a noreturn function, unless it's one of the exceptions raised to
+  // communicate with the debugger, such as the one from OutputDebugString.
+  if (ExceptionRecord->ExceptionCode != DBG_PRINTEXCEPTION_C)
+    __asan_handle_no_return();
+  REAL(RtlRaiseException)(ExceptionRecord);
+}
+
 INTERCEPTOR_WINAPI(void, RaiseException, void *a, void *b, void *c, void *d) {
   CHECK(REAL(RaiseException));
   __asan_handle_no_return();
   REAL(RaiseException)(a, b, c, d);
 }
 
-// TODO(wwchrome): Win64 has no _except_handler3/4.
-// Need to implement _C_specific_handler instead.
-#ifndef _WIN64
+#ifdef _WIN64
+
+INTERCEPTOR_WINAPI(int, __C_specific_handler, void *a, void *b, void *c, void *d) {  // NOLINT
+  CHECK(REAL(__C_specific_handler));
+  __asan_handle_no_return();
+  return REAL(__C_specific_handler)(a, b, c, d);
+}
+
+#else
+
 INTERCEPTOR(int, _except_handler3, void *a, void *b, void *c, void *d) {
   CHECK(REAL(_except_handler3));
   __asan_handle_no_return();
@@ -115,56 +137,29 @@ INTERCEPTOR_WINAPI(DWORD, CreateThread,
                             asan_thread_start, t, thr_flags, tid);
 }
 
-namespace {
-BlockingMutex mu_for_thread_tracking(LINKER_INITIALIZED);
-
-void EnsureWorkerThreadRegistered() {
-  // FIXME: GetCurrentThread relies on TSD, which might not play well with
-  // system thread pools.  We might want to use something like reference
-  // counting to zero out GetCurrentThread() underlying storage when the last
-  // work item finishes?  Or can we disable reclaiming of threads in the pool?
-  BlockingMutexLock l(&mu_for_thread_tracking);
-  if (__asan::GetCurrentThread())
-    return;
-
-  AsanThread *t = AsanThread::Create(
-      /* start_routine */ nullptr, /* arg */ nullptr,
-      /* parent_tid */ -1, /* stack */ nullptr, /* detached */ true);
-  t->Init();
-  asanThreadRegistry().StartThread(t->tid(), 0, 0);
-  SetCurrentThread(t);
-}
-}  // namespace
-
-INTERCEPTOR_WINAPI(DWORD, NtWaitForWorkViaWorkerFactory, DWORD a, DWORD b) {
-  // NtWaitForWorkViaWorkerFactory is called from system worker pool threads to
-  // query work scheduled by BindIoCompletionCallback, QueueUserWorkItem, etc.
-  // System worker pool threads are created at arbitraty point in time and
-  // without using CreateThread, so we wrap NtWaitForWorkViaWorkerFactory
-  // instead and don't register a specific parent_tid/stack.
-  EnsureWorkerThreadRegistered();
-  return REAL(NtWaitForWorkViaWorkerFactory)(a, b);
-}
-
 // }}}
 
 namespace __asan {
 
 void InitializePlatformInterceptors() {
   ASAN_INTERCEPT_FUNC(CreateThread);
-  ASAN_INTERCEPT_FUNC(RaiseException);
 
-// TODO(wwchrome): Win64 uses _C_specific_handler instead.
-#ifndef _WIN64
+#ifdef _WIN64
+  ASAN_INTERCEPT_FUNC(__C_specific_handler);
+#else
   ASAN_INTERCEPT_FUNC(_except_handler3);
   ASAN_INTERCEPT_FUNC(_except_handler4);
 #endif
 
-  // NtWaitForWorkViaWorkerFactory is always linked dynamically.
-  CHECK(::__interception::OverrideFunction(
-      "NtWaitForWorkViaWorkerFactory",
-      (uptr)WRAP(NtWaitForWorkViaWorkerFactory),
-      (uptr *)&REAL(NtWaitForWorkViaWorkerFactory)));
+  // Try to intercept kernel32!RaiseException, and if that fails, intercept
+  // ntdll!RtlRaiseException instead.
+  if (!::__interception::OverrideFunction("RaiseException",
+                                          (uptr)WRAP(RaiseException),
+                                          (uptr *)&REAL(RaiseException))) {
+    CHECK(::__interception::OverrideFunction("RtlRaiseException",
+                                             (uptr)WRAP(RtlRaiseException),
+                                             (uptr *)&REAL(RtlRaiseException)));
+  }
 }
 
 void AsanApplyToGlobals(globals_op_fptr op, const void *needle) {
@@ -220,8 +215,7 @@ void AsanOnDeadlySignal(int, void *siginfo, void *context) {
 // Exception handler for dealing with shadow memory.
 static LONG CALLBACK
 ShadowExceptionHandler(PEXCEPTION_POINTERS exception_pointers) {
-  static uptr page_size = GetPageSizeCached();
-  static uptr alloc_granularity = GetMmapGranularity();
+  uptr page_size = GetPageSizeCached();
   // Only handle access violations.
   if (exception_pointers->ExceptionRecord->ExceptionCode !=
       EXCEPTION_ACCESS_VIOLATION) {
@@ -267,18 +261,45 @@ void InitializePlatformExceptionHandlers() {
 
 static LPTOP_LEVEL_EXCEPTION_FILTER default_seh_handler;
 
+// Check based on flags if we should report this exception.
+static bool ShouldReportDeadlyException(unsigned code) {
+  switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:
+    case EXCEPTION_IN_PAGE_ERROR:
+      return common_flags()->handle_segv;
+    case EXCEPTION_BREAKPOINT:
+    case EXCEPTION_ILLEGAL_INSTRUCTION: {
+      return common_flags()->handle_sigill;
+    }
+  }
+  return false;
+}
+
+// Return the textual name for this exception.
+const char *DescribeSignalOrException(int signo) {
+  unsigned code = signo;
+  // Get the string description of the exception if this is a known deadly
+  // exception.
+  switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:
+      return "access-violation";
+    case EXCEPTION_IN_PAGE_ERROR:
+      return "in-page-error";
+    case EXCEPTION_BREAKPOINT:
+      return "breakpoint";
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+      return "illegal-instruction";
+  }
+  return nullptr;
+}
+
 static long WINAPI SEHHandler(EXCEPTION_POINTERS *info) {
   EXCEPTION_RECORD *exception_record = info->ExceptionRecord;
   CONTEXT *context = info->ContextRecord;
 
-  if (exception_record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION ||
-      exception_record->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) {
-    const char *description =
-        (exception_record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
-            ? "access-violation"
-            : "in-page-error";
+  if (ShouldReportDeadlyException(exception_record->ExceptionCode)) {
     SignalContext sig = SignalContext::Create(exception_record, context);
-    ReportDeadlySignal(description, sig);
+    ReportDeadlySignal(exception_record->ExceptionCode, sig);
   }
 
   // FIXME: Handle EXCEPTION_STACK_OVERFLOW here.
