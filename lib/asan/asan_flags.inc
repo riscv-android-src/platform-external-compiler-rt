@@ -102,7 +102,7 @@ ASAN_FLAG(bool, poison_array_cookie, true,
 // https://github.com/google/sanitizers/issues/309
 // TODO(glider,timurrrr): Fix known issues and enable this back.
 ASAN_FLAG(bool, alloc_dealloc_mismatch,
-          !SANITIZER_MAC && !SANITIZER_WINDOWS && !SANITIZER_ANDROID,
+          (SANITIZER_MAC == 0) && (SANITIZER_WINDOWS == 0),
           "Report errors on malloc/delete, new/free, new/delete[], etc.")
 
 ASAN_FLAG(bool, new_delete_type_mismatch, true,
