@@ -26,17 +26,12 @@ cc_library_static {
     cflags: [
         "-Werror",
         "-Wall",
+        "-Wno-unused-parameter",
     ],
     clang: true,
     srcs:  [
-        "GCDAProfiling.c",
-        "InstrProfiling.c",
-        "InstrProfilingBuffer.c",
-        "InstrProfilingFile.c",
-        "InstrProfilingPlatformDarwin.c",
-        "InstrProfilingPlatformOther.c",
-        "InstrProfilingRuntime.cc",
-        "InstrProfilingUtil.c",
+        "*.c",
+        "*.cc",
     ],
 
     sanitize: {
