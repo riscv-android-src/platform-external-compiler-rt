@@ -432,6 +432,9 @@ cc_defaults {
         android_x86: {
             enabled: true,
         },
+        android_x86_64: {
+            enabled: true,
+        },
         linux: {
             enabled: true,
         },
