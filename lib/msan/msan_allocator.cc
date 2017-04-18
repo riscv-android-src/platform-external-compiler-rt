@@ -103,9 +103,7 @@ static AllocatorCache fallback_allocator_cache;
 static SpinMutex fallback_mutex;
 
 void MsanAllocatorInit() {
-  allocator.Init(
-      common_flags()->allocator_may_return_null,
-      common_flags()->allocator_release_to_os_interval_ms);
+  allocator.Init(common_flags()->allocator_may_return_null);
 }
 
 AllocatorCache *GetAllocatorCache(MsanThreadLocalMallocStorage *ms) {

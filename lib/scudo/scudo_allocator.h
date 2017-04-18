@@ -94,7 +94,6 @@ struct AllocatorOptions {
   u32 QuarantineSizeMb;
   u32 ThreadLocalQuarantineSizeKb;
   bool MayReturnNull;
-  s32 ReleaseToOSIntervalMs;
   bool DeallocationTypeMismatch;
   bool DeleteSizeMismatch;
   bool ZeroContents;

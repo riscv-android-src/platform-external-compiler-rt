@@ -37,11 +37,6 @@ struct atomic_uint16_t {
   volatile Type val_dont_use;
 };
 
-struct atomic_sint32_t {
-  typedef s32 Type;
-  volatile Type val_dont_use;
-};
-
 struct atomic_uint32_t {
   typedef u32 Type;
   volatile Type val_dont_use;

@@ -94,8 +94,7 @@ InternalAllocator *internal_allocator() {
     SpinMutexLock l(&internal_alloc_init_mu);
     if (atomic_load(&internal_allocator_initialized, memory_order_relaxed) ==
         0) {
-      internal_allocator_instance->Init(
-          /* may_return_null */ false, kReleaseToOSIntervalNever);
+      internal_allocator_instance->Init(/* may_return_null*/ false);
       atomic_store(&internal_allocator_initialized, 1, memory_order_release);
     }
   }

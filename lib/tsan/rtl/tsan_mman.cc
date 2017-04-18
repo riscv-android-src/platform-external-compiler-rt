@@ -111,9 +111,7 @@ ScopedGlobalProcessor::~ScopedGlobalProcessor() {
 }
 
 void InitializeAllocator() {
-  allocator()->Init(
-      common_flags()->allocator_may_return_null,
-      common_flags()->allocator_release_to_os_interval_ms);
+  allocator()->Init(common_flags()->allocator_may_return_null);
 }
 
 void InitializeAllocatorLate() {

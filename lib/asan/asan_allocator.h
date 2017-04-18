@@ -37,7 +37,6 @@ struct AllocatorOptions {
   u16 max_redzone;
   u8 may_return_null;
   u8 alloc_dealloc_mismatch;
-  s32 release_to_os_interval_ms;
 
   void SetFrom(const Flags *f, const CommonFlags *cf);
   void CopyTo(Flags *f, CommonFlags *cf);

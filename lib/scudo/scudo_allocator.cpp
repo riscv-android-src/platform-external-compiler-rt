@@ -212,7 +212,6 @@ static thread_local QuarantineCache ThreadQuarantineCache;
 
 void AllocatorOptions::setFrom(const Flags *f, const CommonFlags *cf) {
   MayReturnNull = cf->allocator_may_return_null;
-  ReleaseToOSIntervalMs = cf->allocator_release_to_os_interval_ms;
   QuarantineSizeMb = f->QuarantineSizeMb;
   ThreadLocalQuarantineSizeKb = f->ThreadLocalQuarantineSizeKb;
   DeallocationTypeMismatch = f->DeallocationTypeMismatch;
@@ -222,7 +221,6 @@ void AllocatorOptions::setFrom(const Flags *f, const CommonFlags *cf) {
 
 void AllocatorOptions::copyTo(Flags *f, CommonFlags *cf) const {
   cf->allocator_may_return_null = MayReturnNull;
-  cf->allocator_release_to_os_interval_ms = ReleaseToOSIntervalMs;
   f->QuarantineSizeMb = QuarantineSizeMb;
   f->ThreadLocalQuarantineSizeKb = ThreadLocalQuarantineSizeKb;
   f->DeallocationTypeMismatch = DeallocationTypeMismatch;
@@ -278,7 +276,7 @@ struct Allocator {
     DeallocationTypeMismatch = Options.DeallocationTypeMismatch;
     DeleteSizeMismatch = Options.DeleteSizeMismatch;
     ZeroContents = Options.ZeroContents;
-    BackendAllocator.Init(Options.MayReturnNull, Options.ReleaseToOSIntervalMs);
+    BackendAllocator.Init(Options.MayReturnNull);
     AllocatorQuarantine.Init(
         static_cast<uptr>(Options.QuarantineSizeMb) << 20,
         static_cast<uptr>(Options.ThreadLocalQuarantineSizeKb) << 10);
