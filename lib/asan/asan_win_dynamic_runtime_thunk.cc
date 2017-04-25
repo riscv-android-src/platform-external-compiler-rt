@@ -14,18 +14,23 @@
 // using the default "import library" generated when linking the DLL RTL.
 //
 // This includes:
+//  - creating weak aliases to default implementation imported from asan dll.
 //  - forwarding the detect_stack_use_after_return runtime option
 //  - working around deficiencies of the MD runtime
 //  - installing a custom SEH handler
 //
 //===----------------------------------------------------------------------===//
 
-// Only compile this code when building asan_dynamic_runtime_thunk.lib
-// Using #ifdef rather than relying on Makefiles etc.
-// simplifies the build procedure.
-#ifdef ASAN_DYNAMIC_RUNTIME_THUNK
+#ifdef SANITIZER_DYNAMIC_RUNTIME_THUNK
+#define SANITIZER_IMPORT_INTERFACE 1
+#include "sanitizer_common/sanitizer_win_defs.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
+// Define weak alias for all weak functions imported from asan dll.
+#define INTERFACE_FUNCTION(Name)
+#define INTERFACE_WEAK_FUNCTION(Name) WIN_WEAK_IMPORT_DEF(Name)
+#include "asan_interface.inc"
 
 // First, declare CRT sections we'll be using in this file
 #pragma section(".CRT$XIB", long, read)  // NOLINT
@@ -33,6 +38,7 @@
 #pragma section(".CRT$XCAB", long, read)  // NOLINT
 #pragma section(".CRT$XTW", long, read)  // NOLINT
 #pragma section(".CRT$XTY", long, read)  // NOLINT
+#pragma section(".CRT$XLAB", long, read)  // NOLINT
 
 ////////////////////////////////////////////////////////////////////////////////
 // Define a copy of __asan_option_detect_stack_use_after_return that should be
@@ -61,9 +67,18 @@ static int InitializeClonedVariables() {
   return 0;
 }
 
-// Our cloned variables must be initialized before C/C++ constructors.
-__declspec(allocate(".CRT$XIB"))
-int (*__asan_initialize_cloned_variables)() = InitializeClonedVariables;
+static void NTAPI asan_thread_init(void *mod, unsigned long reason,
+    void *reserved) {
+  if (reason == DLL_PROCESS_ATTACH) InitializeClonedVariables();
+}
+
+// Our cloned variables must be initialized before C/C++ constructors.  If TLS
+// is used, our .CRT$XLAB initializer will run first. If not, our .CRT$XIB
+// initializer is needed as a backup.
+__declspec(allocate(".CRT$XIB")) int (*__asan_initialize_cloned_variables)() =
+    InitializeClonedVariables;
+__declspec(allocate(".CRT$XLAB")) void (NTAPI *__asan_tls_init)(void *,
+    unsigned long, void *) = asan_thread_init;
 
 ////////////////////////////////////////////////////////////////////////////////
 // For some reason, the MD CRT doesn't call the C/C++ terminators during on DLL
@@ -111,4 +126,6 @@ __declspec(allocate(".CRT$XCAB")) int (*__asan_seh_interceptor)() =
     SetSEHFilter;
 }
 
-#endif // ASAN_DYNAMIC_RUNTIME_THUNK
+WIN_FORCE_LINK(__asan_dso_reg_hook)
+
+#endif // SANITIZER_DYNAMIC_RUNTIME_THUNK
