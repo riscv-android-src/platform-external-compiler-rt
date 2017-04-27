@@ -16,7 +16,8 @@
 
 #if SANITIZER_LINUX && (defined(__x86_64__) || defined(__mips__) || \
                         defined(__aarch64__) || defined(__powerpc64__) || \
-                        defined(__s390__))
+                        defined(__s390__) || defined(__i386__) || \
+                        defined(__arm__))
 
 #include "sanitizer_stoptheworld.h"
 
@@ -31,17 +32,13 @@
 #include <sys/types.h> // for pid_t
 #include <sys/uio.h> // for iovec
 #include <elf.h> // for NT_PRSTATUS
-#if SANITIZER_ANDROID && defined(__arm__)
-# include <linux/user.h>  // for pt_regs
-#else
-# ifdef __aarch64__
+#if defined(__aarch64__) && !SANITIZER_ANDROID
 // GLIBC 2.20+ sys/user does not include asm/ptrace.h
-#  include <asm/ptrace.h>
-# endif
-# include <sys/user.h>  // for user_regs_struct
-# if SANITIZER_ANDROID && SANITIZER_MIPS
-#   include <asm/reg.h>  // for mips SP register in sys/user.h
-# endif
+# include <asm/ptrace.h>
+#endif
+#include <sys/user.h>  // for user_regs_struct
+#if SANITIZER_ANDROID && SANITIZER_MIPS
+# include <asm/reg.h>  // for mips SP register in sys/user.h
 #endif
 #include <sys/wait.h> // for signal-related stuff
 
@@ -493,9 +490,9 @@ typedef _user_regs_struct regs_struct;
 #error "Unsupported architecture"
 #endif // SANITIZER_ANDROID && defined(__arm__)
 
-int SuspendedThreadsList::GetRegistersAndSP(uptr index,
-                                            uptr *buffer,
-                                            uptr *sp) const {
+PtraceRegistersStatus SuspendedThreadsList::GetRegistersAndSP(uptr index,
+                                                              uptr *buffer,
+                                                              uptr *sp) const {
   pid_t tid = GetThreadID(index);
   regs_struct regs;
   int pterrno;
@@ -513,12 +510,16 @@ int SuspendedThreadsList::GetRegistersAndSP(uptr index,
   if (isErr) {
     VReport(1, "Could not get registers from thread %d (errno %d).\n", tid,
             pterrno);
-    return -1;
+    // ESRCH means that the given thread is not suspended or already dead.
+    // Therefore it's unsafe to inspect its data (e.g. walk through stack) and
+    // we should notify caller about this.
+    return pterrno == ESRCH ? REGISTERS_UNAVAILABLE_FATAL
+                            : REGISTERS_UNAVAILABLE;
   }
 
   *sp = regs.REG_SP;
   internal_memcpy(buffer, &regs, sizeof(regs));
-  return 0;
+  return REGISTERS_AVAILABLE;
 }
 
 uptr SuspendedThreadsList::RegisterCount() {
@@ -528,4 +529,4 @@ uptr SuspendedThreadsList::RegisterCount() {
 
 #endif  // SANITIZER_LINUX && (defined(__x86_64__) || defined(__mips__)
         // || defined(__aarch64__) || defined(__powerpc64__)
-        // || defined(__s390__)
+        // || defined(__s390__) || defined(__i386__) || defined(__arm__)

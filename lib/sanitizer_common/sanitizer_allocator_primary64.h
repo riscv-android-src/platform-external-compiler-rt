@@ -227,9 +227,8 @@ class SizeClassAllocator64 {
     uptr in_use = region->n_allocated - region->n_freed;
     uptr avail_chunks = region->allocated_user / ClassIdToSize(class_id);
     Printf(
-        "  %02zd (%zd): mapped: %zdK allocs: %zd frees: %zd inuse: %zd "
-        "num_freed_chunks %zd"
-        " avail: %zd rss: %zdK releases: %zd\n",
+        "  %02zd (%6zd): mapped: %6zdK allocs: %7zd frees: %7zd inuse: %6zd "
+        "num_freed_chunks %7zd avail: %6zd rss: %6zdK releases: %6zd\n",
         class_id, ClassIdToSize(class_id), region->mapped_user >> 10,
         region->n_allocated, region->n_freed, in_use,
         region->num_freed_chunks, avail_chunks, rss >> 10,
@@ -458,17 +457,11 @@ class SizeClassAllocator64 {
     }
   }
 
-  bool MaybeReleaseChunkRange(uptr region_beg, uptr chunk_size,
+  void MaybeReleaseChunkRange(uptr region_beg, uptr chunk_size,
                               CompactPtrT first, CompactPtrT last) {
     uptr beg_ptr = CompactPtrToPointer(region_beg, first);
     uptr end_ptr = CompactPtrToPointer(region_beg, last) + chunk_size;
-    const uptr page_size = GetPageSizeCached();
-    CHECK_GE(end_ptr - beg_ptr, page_size);
-    beg_ptr = RoundUpTo(beg_ptr, page_size);
-    end_ptr = RoundDownTo(end_ptr, page_size);
-    if (end_ptr == beg_ptr) return false;
-    ReleaseMemoryToOS(beg_ptr, end_ptr - beg_ptr);
-    return true;
+    ReleaseMemoryPagesToOS(beg_ptr, end_ptr);
   }
 
   // Attempts to release some RAM back to OS. The region is expected to be
