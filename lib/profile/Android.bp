@@ -41,5 +41,5 @@ cc_library_static {
     },
     compile_multilib: "both",
     stl: "none",
-    sdk_version: "21",
+    sdk_version: "14",
 }
