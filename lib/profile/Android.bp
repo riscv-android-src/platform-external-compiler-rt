@@ -30,7 +30,6 @@ cc_library_static {
         // Set a variable discovered by CMake config.
         "-DCOMPILER_RT_HAS_FCNTL_LCK",
     ],
-    clang: true,
     srcs:  [
         "*.c",
         "*.cc",

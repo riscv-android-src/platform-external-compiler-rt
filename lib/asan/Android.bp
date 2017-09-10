@@ -86,7 +86,6 @@ cc_library_static {
         },
     },
 
-    clang: true,
     sdk_version: "19",
     stl: "none",
 
@@ -104,7 +103,6 @@ cc_library_host_static {
     cflags: asan_rtl_cflags,
     srcs: asan_rtl_cxx_files,
 
-    clang: true,
     compile_multilib: "both",
 
     sanitize: {
@@ -147,7 +145,6 @@ cc_defaults {
         "liblog",
         "libdl",
     ],
-    clang: true,
     sanitize: {
         never: true,
     },
@@ -261,7 +258,6 @@ cc_library_static {
 
     static_libs: ["libgtest"],
 
-    clang: true,
     sanitize: {
         never: true,
     },
@@ -305,7 +301,6 @@ cc_test {
         address: true,
         blacklist: "tests/asan_test.ignore",
     },
-    clang: true,
 
     stl: "libc++",
     target: {
