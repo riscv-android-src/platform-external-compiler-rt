@@ -148,10 +148,6 @@ cc_test_host {
         "libtsan",
         "libubsan",
     ],
-    host_ldlibs: [
-        "-lrt",
-        "-ldl",
-    ],
     target: {
         darwin: {
             enabled: false,
@@ -182,10 +178,6 @@ cc_test_host {
     static_libs: [
         "libtsan",
         "libubsan",
-    ],
-    host_ldlibs: [
-        "-lrt",
-        "-ldl",
     ],
     target: {
         darwin: {
