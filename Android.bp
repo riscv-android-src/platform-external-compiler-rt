@@ -364,26 +364,11 @@ cc_library {
     target: {
         android: {
             shared_libs: ["liblog"],
-        },
-        android_arm: {
-            static_libs: ["libunwind_llvm"],
-            ldflags: ["-Wl,--exclude-libs,libunwind_llvm.a"],
-        },
-        android_arm64: {
-            static_libs: ["libunwindbacktrace", "libunwind_static"],
-            ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a:libunwind.a"],
-        },
-        android_x86: {
-            static_libs: ["libunwindbacktrace", "libunwind_static"],
-            ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a:libunwind.a"],
+            static_libs: ["libunwind"],
+            ldflags: ["-Wl,--exclude-libs,libunwind.a"],
         },
         android_x86_64: {
             srcs: ["lib/builtins/ppc/floatditf.c"],
-            static_libs: ["libunwindbacktrace", "libunwind_static"],
-            ldflags: ["-Wl,--exclude-libs,libunwindbacktrace.a:libunwind.a"],
-        },
-        linux_glibc: {
-            static_libs: ["libunwindbacktrace", "libunwind_static"],
         },
         windows: {
             enabled: true,
